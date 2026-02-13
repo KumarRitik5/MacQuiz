@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     CORS_ORIGINS: str
+    CORS_ORIGIN_REGEX: str = ""
     CORS_ALLOW_CREDENTIALS: bool = True
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str

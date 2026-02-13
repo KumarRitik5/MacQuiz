@@ -2,7 +2,7 @@
 function resolveApiBaseUrl() {
     const envValue = import.meta.env.VITE_API_BASE_URL;
     if (!envValue) {
-        return import.meta.env.DEV ? 'http://localhost:8000' : 'http://3.110.145.152:8000';
+        return import.meta.env.DEV ? 'http://localhost:8000' : '';
     }
 
     const candidates = envValue
