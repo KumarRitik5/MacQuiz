@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 from app.core.config import settings
 from app.db.database import engine, Base, SessionLocal
 from app.models.models import User
 from app.core.security import get_password_hash
 from app.api.v1 import auth, users, quizzes, attempts, subjects, question_bank, analytics
+
+logger = logging.getLogger(__name__)
 
 def init_admin() -> None:
     """Create the initial admin user if it doesn't exist.
@@ -41,8 +44,15 @@ def init_admin() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    Base.metadata.create_all(bind=engine)
-    init_admin()
+    app.state.db_startup_ok = True
+    app.state.db_startup_error = None
+    try:
+        Base.metadata.create_all(bind=engine)
+        init_admin()
+    except Exception as error:
+        app.state.db_startup_ok = False
+        app.state.db_startup_error = str(error)
+        logger.exception("Database startup/bootstrap failed")
     yield
     # Shutdown (nothing to do)
 
@@ -111,7 +121,8 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {
-        "status": "healthy",
+        "status": "healthy" if getattr(app.state, "db_startup_ok", True) else "degraded",
         "version": "2.0.0",
-        "database": "connected"
+        "database": "connected" if getattr(app.state, "db_startup_ok", True) else "unavailable",
+        "startup_error": getattr(app.state, "db_startup_error", None),
     }
