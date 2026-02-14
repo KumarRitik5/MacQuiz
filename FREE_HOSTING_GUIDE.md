@@ -14,10 +14,11 @@ This guide gives you a **fully free starter deployment** using:
 3. Copy your connection string and use this SQLAlchemy format:
 
 ```env
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:6543/postgres?sslmode=require
+DATABASE_URL=postgresql+psycopg://USER:ENCODED_PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
-Use the pooled endpoint if available.
+Use the **Supabase Session Pooler** endpoint (IPv4). Do not use `db.<project-ref>.supabase.co` for Vercel.
+Also URL-encode password special characters like `? / + & @ :`.
 
 ## 2) Deploy backend to Vercel
 
@@ -29,11 +30,12 @@ Your backend is already configured with [backend/vercel.json](backend/vercel.jso
 4. Add these environment variables in Vercel (Project Settings → Environment Variables):
 
 ```env
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:6543/postgres?sslmode=require
+DATABASE_URL=postgresql+psycopg://USER:ENCODED_PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres?sslmode=require
 SECRET_KEY=generate-a-long-random-secret
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=https://your-frontend-domain.vercel.app,http://localhost:5173
+CORS_ORIGIN_REGEX=^https://.*\.vercel\.app$
 CORS_ALLOW_CREDENTIALS=true
 ADMIN_EMAIL=admin@macquiz.com
 ADMIN_PASSWORD=change-this-password
