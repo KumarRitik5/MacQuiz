@@ -8,6 +8,7 @@ import BulkUploadModal from "../components/BulkUploadModal";
 import BulkQuizUploadModal from "../components/BulkQuizUploadModal";
 import QuizAssignmentModal from "../components/QuizAssignmentModal";
 import QuizCreator from "./QuizCreator";
+import sdcLogo from "../assets/sdc-logo.png";
 import {
     LayoutDashboard, Users, Zap, FileText, Settings, LogOut, CheckCircle, Clock,
     TrendingUp, TrendingDown, ClipboardList, BarChart3, Search, Plus, X, List, Save, UserCheck, Calendar, Upload,
@@ -4340,13 +4341,9 @@ export default function AdminDashboard() {
 
             <div className="fixed left-3 bottom-20 lg:bottom-4 z-40 pointer-events-none">
                 <img
-                    src="/SDC%20logo.png"
+                    src={sdcLogo}
                     alt="SDC Logo"
                     className="w-[160px] sm:w-[180px] h-auto object-contain"
-                    onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = '/SDC logo.png';
-                    }}
                 />
             </div>
 
