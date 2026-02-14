@@ -2,15 +2,15 @@ from pydantic_settings import BaseSettings
 from typing import List
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    SECRET_KEY: str
+    DATABASE_URL: str = "sqlite:///./quizapp.db"
+    SECRET_KEY: str = "change-this-secret-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    CORS_ORIGINS: str
+    CORS_ORIGINS: str = "http://localhost:5173"
     CORS_ORIGIN_REGEX: str = ""
     CORS_ALLOW_CREDENTIALS: bool = True
-    ADMIN_EMAIL: str
-    ADMIN_PASSWORD: str
+    ADMIN_EMAIL: str = "admin@macquiz.com"
+    ADMIN_PASSWORD: str = "admin123"
     
     @property
     def cors_origins_list(self) -> List[str]:
