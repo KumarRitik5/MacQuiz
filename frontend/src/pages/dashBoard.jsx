@@ -4073,6 +4073,22 @@ export default function AdminDashboard() {
         { name: "Settings", icon: Settings, title: "Settings" },
     ];
 
+    useEffect(() => {
+        const allowedTabsByRole = {
+            teacher: ["Dashboard", "Quizzes", "Students", "Student Results", "SDC Team", "Settings"],
+            student: ["Dashboard", "My Quizzes", "My Progress", "Profile", "SDC Team"],
+            admin: ["Dashboard", "Users", "Teachers", "Students", "Quizzes", "Student Results", "Detailed Reports", "SDC Team", "Settings"],
+        };
+
+        const role = user?.role || 'student';
+        const allowedTabs = allowedTabsByRole[role] || allowedTabsByRole.student;
+
+        if (!allowedTabs.includes(activeTab)) {
+            setActiveTab('Dashboard');
+            setUserViewMode('list');
+        }
+    }, [activeTab, user?.role]);
+
     // Handler to switch to Users tab and open the Add User form immediately
     const handleAddNewUser = () => {
         setActiveTab('Users');
@@ -4116,8 +4132,8 @@ export default function AdminDashboard() {
                                 ))
                             )}
                         </div>
-                        {/* Quick Access Card (BG reverted) */}
-                        <AddNewUserCard onAddClick={handleAddNewUser} />
+                        {/* Quick Access Card (Admin only) */}
+                        {user?.role === 'admin' && <AddNewUserCard onAddClick={handleAddNewUser} />}
 
                         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
                             <h2 className="text-xl font-semibold text-gray-800 border-b pb-4 mb-4">
@@ -4133,6 +4149,9 @@ export default function AdminDashboard() {
                 );
             } // Added braces to fix no-case-declarations
             case 'Users':
+                if (user?.role !== 'admin') {
+                    return <Placeholder content="You do not have access to User Management." />;
+                }
                 return userViewMode === 'add' ? (
                     <UserCreationForm 
                         onCancel={() => setUserViewMode('list')} 
