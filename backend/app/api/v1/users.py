@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -206,8 +206,8 @@ async def bulk_upload_users(
 
 @router.get("/", response_model=List[UserResponse], dependencies=[Depends(require_role(["admin", "teacher"]))])
 async def get_all_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=300),
     role: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -220,7 +220,7 @@ async def get_all_users(
     elif role:
         query = query.filter(User.role == role.lower())
     
-    users = query.offset(skip).limit(limit).all()
+    users = query.order_by(User.created_at.desc(), User.id.desc()).offset(skip).limit(limit).all()
     return users
 
 @router.get("/me", response_model=UserResponse)

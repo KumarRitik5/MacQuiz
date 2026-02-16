@@ -277,6 +277,8 @@ export const attemptAPI = {
         if (filters.quiz_id) params.push(`quiz_id=${filters.quiz_id}`);
         if (filters.student_id) params.push(`student_id=${filters.student_id}`);
         if (filters.completed_only !== undefined) params.push(`completed_only=${filters.completed_only}`);
+        if (filters.skip !== undefined) params.push(`skip=${filters.skip}`);
+        params.push(`limit=${filters.limit ?? 100}`);
         const url = params.length > 0 
             ? `/api/v1/attempts/all-attempts?${params.join('&')}`
             : '/api/v1/attempts/all-attempts';

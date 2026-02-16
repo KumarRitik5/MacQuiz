@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime, timedelta
 from typing import List, Optional
 from app.db.database import get_db
@@ -568,6 +568,8 @@ async def get_remaining_time(
 @router.get("/my-attempts")
 async def get_my_attempts(
     include_incomplete: bool = False,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=300),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -578,17 +580,44 @@ async def get_my_attempts(
     if not include_incomplete:
         query = query.filter(QuizAttempt.is_completed == True)
     
-    attempts = query.order_by(QuizAttempt.started_at.desc()).all()
+    attempts = query.order_by(QuizAttempt.started_at.desc()).offset(skip).limit(limit).all()
+
+    if not attempts:
+        return []
+
+    quiz_ids = list({attempt.quiz_id for attempt in attempts})
+    attempt_ids = [attempt.id for attempt in attempts]
+
+    quizzes = db.query(Quiz.id, Quiz.title, Quiz.total_marks).filter(Quiz.id.in_(quiz_ids)).all()
+    quiz_map = {quiz.id: quiz for quiz in quizzes}
+
+    question_count_rows = db.query(
+        Question.quiz_id,
+        func.count(Question.id).label("total_questions"),
+    ).filter(
+        Question.quiz_id.in_(quiz_ids)
+    ).group_by(
+        Question.quiz_id
+    ).all()
+    question_count_map = {row.quiz_id: int(row.total_questions or 0) for row in question_count_rows}
+
+    correct_answer_rows = db.query(
+        Answer.attempt_id,
+        func.count(Answer.id).label("correct_answers"),
+    ).filter(
+        Answer.attempt_id.in_(attempt_ids),
+        Answer.is_correct == True
+    ).group_by(
+        Answer.attempt_id
+    ).all()
+    correct_answer_map = {row.attempt_id: int(row.correct_answers or 0) for row in correct_answer_rows}
     
     # Enhance each attempt with calculated fields
     result = []
     for attempt in attempts:
-        quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
-        total_questions = db.query(Question).filter(Question.quiz_id == attempt.quiz_id).count()
-        correct_answers = db.query(Answer).filter(
-            Answer.attempt_id == attempt.id,
-            Answer.is_correct == True
-        ).count() if attempt.is_completed else None
+        quiz = quiz_map.get(attempt.quiz_id)
+        total_questions = question_count_map.get(attempt.quiz_id, 0)
+        correct_answers = correct_answer_map.get(attempt.id, 0) if attempt.is_completed else None
         
         # Format time taken - handle None case
         time_taken_str = None
@@ -625,6 +654,8 @@ async def get_all_attempts(
     quiz_id: int = None,
     student_id: int = None,
     completed_only: bool = True,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=300),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -647,12 +678,52 @@ async def get_all_attempts(
     if student_id:
         query = query.filter(QuizAttempt.student_id == student_id)
     
-    attempts = query.order_by(QuizAttempt.submitted_at.desc()).all()
+    attempts = query.order_by(QuizAttempt.submitted_at.desc(), QuizAttempt.started_at.desc()).offset(skip).limit(limit).all()
+
+    if not attempts:
+        return []
+
+    quiz_ids = list({attempt.quiz_id for attempt in attempts})
+    student_ids = list({attempt.student_id for attempt in attempts})
+    attempt_ids = [attempt.id for attempt in attempts]
+
+    quizzes = db.query(Quiz).filter(Quiz.id.in_(quiz_ids)).all()
+    quiz_map = {quiz.id: quiz for quiz in quizzes}
+
+    students = db.query(User.id, User.first_name, User.last_name, User.email).filter(User.id.in_(student_ids)).all()
+    student_map = {student.id: student for student in students}
+
+    question_count_rows = db.query(
+        Question.quiz_id,
+        func.count(Question.id).label("total_questions"),
+    ).filter(
+        Question.quiz_id.in_(quiz_ids)
+    ).group_by(
+        Question.quiz_id
+    ).all()
+    question_count_map = {row.quiz_id: int(row.total_questions or 0) for row in question_count_rows}
+
+    answer_stats_rows = db.query(
+        Answer.attempt_id,
+        func.count(Answer.id).label("answered_count"),
+        func.sum(case((Answer.is_correct == True, 1), else_=0)).label("correct_answers"),
+    ).filter(
+        Answer.attempt_id.in_(attempt_ids)
+    ).group_by(
+        Answer.attempt_id
+    ).all()
+    answer_stats_map = {
+        row.attempt_id: {
+            "answered_count": int(row.answered_count or 0),
+            "correct_answers": int(row.correct_answers or 0),
+        }
+        for row in answer_stats_rows
+    }
     
     # Enhance each attempt with calculated fields
     result = []
     for attempt in attempts:
-        quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+        quiz = quiz_map.get(attempt.quiz_id)
 
         # Auto-finalize expired incomplete attempts so live monitor stays accurate
         if quiz and not attempt.is_completed:
@@ -667,13 +738,11 @@ async def get_all_attempts(
             if is_expired:
                 _finalize_expired_attempt(db, attempt, quiz, now)
 
-        student = db.query(User).filter(User.id == attempt.student_id).first()
-        total_questions = db.query(Question).filter(Question.quiz_id == attempt.quiz_id).count()
-        correct_answers = db.query(Answer).filter(
-            Answer.attempt_id == attempt.id,
-            Answer.is_correct == True
-        ).count()
-        answered_count = db.query(Answer).filter(Answer.attempt_id == attempt.id).count()
+        student = student_map.get(attempt.student_id)
+        total_questions = question_count_map.get(attempt.quiz_id, 0)
+        answer_stats = answer_stats_map.get(attempt.id, {"answered_count": 0, "correct_answers": 0})
+        correct_answers = answer_stats["correct_answers"]
+        answered_count = answer_stats["answered_count"]
 
         remaining_seconds = None
         if not attempt.is_completed and quiz:
