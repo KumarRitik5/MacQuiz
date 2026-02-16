@@ -34,6 +34,22 @@ class APIError extends Error {
     }
 }
 
+const GET_CACHE_TTL_MS = 8000;
+const getResponseCache = new Map();
+
+function cloneJsonData(data) {
+    if (data === null || data === undefined) return data;
+    try {
+        return structuredClone(data);
+    } catch {
+        return JSON.parse(JSON.stringify(data));
+    }
+}
+
+export function clearApiCache() {
+    getResponseCache.clear();
+}
+
 function isJwtExpired(token) {
     try {
         const parts = token.split('.');
@@ -57,6 +73,7 @@ async function fetchAPI(endpoint, options = {}) {
         );
     }
     const url = `${API_BASE_URL}${endpoint}`;
+    const method = (options.method || 'GET').toUpperCase();
     const token = localStorage.getItem('access_token');
     if (token && isJwtExpired(token)) {
         localStorage.removeItem('access_token');
@@ -80,6 +97,21 @@ async function fetchAPI(endpoint, options = {}) {
     
     if (token && !options.skipAuth) {
         headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const shouldUseGetCache = method === 'GET' && !options.skipCache;
+    const cacheKey = shouldUseGetCache ? `${token || 'anon'}::${url}` : null;
+
+    if (shouldUseGetCache && cacheKey) {
+        const cached = getResponseCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cloneJsonData(cached.data);
+        }
+        if (cached) {
+            getResponseCache.delete(cacheKey);
+        }
+    } else if (method !== 'GET') {
+        clearApiCache();
     }
     
     try {
@@ -117,7 +149,14 @@ async function fetchAPI(endpoint, options = {}) {
         
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
-            return await response.json();
+            const jsonData = await response.json();
+            if (shouldUseGetCache && cacheKey) {
+                getResponseCache.set(cacheKey, {
+                    data: jsonData,
+                    expiresAt: Date.now() + GET_CACHE_TTL_MS,
+                });
+            }
+            return cloneJsonData(jsonData);
         }
         
         return response;
@@ -155,6 +194,7 @@ export const authAPI = {
         });
         
         localStorage.setItem('access_token', response.access_token);
+        clearApiCache();
         return response;
     },
     
@@ -165,6 +205,7 @@ export const authAPI = {
             fetchAPI('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
         }
         localStorage.removeItem('access_token');
+        clearApiCache();
     },
 
     changePassword: (currentPassword, newPassword) => fetchAPI('/api/v1/auth/change-password', {
@@ -252,7 +293,7 @@ export const attemptAPI = {
             throw err;
         }
     },
-    getRemainingTime: (attemptId) => fetchAPI(`/api/v1/attempts/${attemptId}/remaining-time`),
+    getRemainingTime: (attemptId) => fetchAPI(`/api/v1/attempts/${attemptId}/remaining-time`, { skipCache: true }),
     startAttempt: (quizId) => fetchAPI('/api/v1/attempts/start', {
         method: 'POST',
         body: JSON.stringify({ quiz_id: quizId }),

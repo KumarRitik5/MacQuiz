@@ -3809,6 +3809,7 @@ export default function AdminDashboard() {
     const [statsData, setStatsData] = useState(null);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef(null);
+    const hasMountedRef = useRef(false);
 
     const fetchDashboardStats = useCallback(async () => {
         setStatsLoading(true);
@@ -3846,6 +3847,10 @@ export default function AdminDashboard() {
 
     // Refresh stats whenever user navigates back to Dashboard
     useEffect(() => {
+        if (!hasMountedRef.current) {
+            hasMountedRef.current = true;
+            return;
+        }
         if (activeTab === 'Dashboard') {
             setStatsRefresh(prev => prev + 1);
         }
