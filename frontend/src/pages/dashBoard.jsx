@@ -3137,7 +3137,7 @@ const SettingsComponent = ({ currentUserRole }) => {
                 <div className="mt-4 p-3 bg-green-50 border-l-4 border-green-500 rounded">
                     <p className="text-sm text-green-900">
                         <CheckCircle size={16} className="inline mr-2" />
-                        <strong>All settings saved locally.</strong> Use the helper functions in <code className="bg-green-100 px-1 rounded">utils/settingsHelper.js</code> to access these configurations throughout the app.
+                        <strong>Settings saved for this browser.</strong> These values are read from <code className="bg-green-100 px-1 rounded">localStorage</code> via <code className="bg-green-100 px-1 rounded">utils/settingsHelper.js</code>.
                     </p>
                 </div>
             </div>
