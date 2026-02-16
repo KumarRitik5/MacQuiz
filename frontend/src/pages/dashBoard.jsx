@@ -4257,11 +4257,11 @@ export default function AdminDashboard() {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 lg:ml-64 p-3 sm:p-4 md:p-6 lg:p-8 pb-20 lg:pb-8 w-full overflow-x-hidden">
+            <main className="flex-1 lg:ml-64 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8 w-full overflow-x-hidden">
                 {/* Header/Title with Profile Avatar */}
                 <header className="mb-4 sm:mb-6 md:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-4xl font-bold text-gray-900">
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">
                             {getCurrentTitle()}
                         </h1>
                         <p className="text-gray-500 mt-1">
@@ -4318,15 +4318,15 @@ export default function AdminDashboard() {
 
             {/* Mobile Bottom Navigation */}
             <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-30">
-                <div className="flex justify-around items-center py-2">
-                    {navItems.slice(0, 4).map((item) => (
+                <div className="flex items-center py-2 px-2 gap-2 overflow-x-auto scrollbar-hide">
+                    {navItems.map((item) => (
                         <button
                             key={item.name}
                             onClick={() => {
                                 setActiveTab(item.name);
                                 if (item.onClick) item.onClick();
                             }}
-                            className={`flex flex-col items-center p-2 rounded-lg transition ${
+                            className={`flex-shrink-0 min-w-[72px] flex flex-col items-center p-2 rounded-lg transition ${
                                 activeTab === item.name
                                     ? 'text-blue-600'
                                     : 'text-gray-600'
@@ -4339,7 +4339,7 @@ export default function AdminDashboard() {
                 </div>
             </nav>
 
-            <div className="fixed left-3 bottom-20 lg:bottom-4 z-40 pointer-events-none">
+            <div className="hidden sm:block fixed left-3 bottom-20 lg:bottom-4 z-40 pointer-events-none">
                 <img
                     src={sdcLogo}
                     alt="SDC Logo"

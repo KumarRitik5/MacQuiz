@@ -267,11 +267,11 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
     }
 
     return (
-        <div className={`${embedded ? '' : 'min-h-screen'} bg-gradient-to-br from-blue-50 to-indigo-50 py-8`}>
+        <div className={`${embedded ? '' : 'min-h-screen'} bg-gradient-to-br from-blue-50 to-indigo-50 py-4 sm:py-8`}>
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Header */}
-                <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8 mb-6">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                         {isEditMode ? 'Edit Quiz' : 'Create New Quiz'}
                     </h1>
                     <p className="text-gray-600">
@@ -280,7 +280,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 </div>
 
                 {/* Quiz Details */}
-                <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+                <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8 mb-6">
                     <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
                         <FileText className="mr-2 text-blue-600" size={24} />
                         Quiz Details
@@ -408,8 +408,8 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 </div>
 
                 {/* Questions Section */}
-                <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
-                    <div className="flex justify-between items-center mb-6">
+                <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8 mb-6">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6">
                         <h2 className="text-xl font-bold text-gray-900 flex items-center">
                             <Award className="mr-2 text-blue-600" size={24} />
                             Questions ({quizData.questions.length})
@@ -419,7 +419,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                                 resetQuestionForm();
                                 setShowQuestionForm(true);
                             }}
-                            className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
+                            className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
                         >
                             <Plus size={20} className="mr-2" />
                             Add Question
@@ -436,8 +436,8 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                     ) : (
                         <div className="space-y-4">
                             {quizData.questions.map((q, index) => (
-                                <div key={q.id} className="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition">
-                                    <div className="flex justify-between items-start mb-4">
+                                <div key={q.id} className="border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-blue-300 transition">
+                                    <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-3 mb-4">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-bold">
@@ -452,7 +452,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                                             </div>
                                             <p className="text-lg font-semibold text-gray-900">{q.question_text}</p>
                                         </div>
-                                        <div className="flex items-center space-x-2 ml-4">
+                                        <div className="flex items-center flex-wrap gap-2 sm:ml-4">
                                             <button
                                                 onClick={() => moveQuestion(index, 'up')}
                                                 disabled={index === 0}
@@ -490,7 +490,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
 
                                     {/* Display Options */}
                                     {q.question_type === 'mcq' && (
-                                        <div className="grid grid-cols-2 gap-3 mt-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                                             {['A', 'B', 'C', 'D'].map((opt) => {
                                                 const optKey = `option_${opt.toLowerCase()}`;
                                                 const optText = q[optKey];
@@ -533,10 +533,10 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 {/* Question Form Modal */}
                 {showQuestionForm && (
                     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                        <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full my-8">
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-3xl">
+                        <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full my-4 sm:my-8 max-h-[92vh] overflow-y-auto">
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 sm:p-6 rounded-t-3xl">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-2xl font-bold">
+                                    <h3 className="text-xl sm:text-2xl font-bold">
                                         {editingIndex !== null ? 'Edit Question' : 'Add New Question'}
                                     </h3>
                                     <button
@@ -551,7 +551,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                                 </div>
                             </div>
 
-                            <div className="p-8 space-y-6">
+                            <div className="p-4 sm:p-6 md:p-8 space-y-6">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Question Type
@@ -656,19 +656,19 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                                     />
                                 </div>
 
-                                <div className="flex justify-end space-x-4 pt-4">
+                                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:space-x-4 pt-4">
                                     <button
                                         onClick={() => {
                                             setShowQuestionForm(false);
                                             resetQuestionForm();
                                         }}
-                                        className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-100 transition"
+                                        className="w-full sm:w-auto px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-100 transition"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={addQuestion}
-                                        className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg"
+                                        className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg"
                                     >
                                         <Save size={20} className="mr-2" />
                                         {editingIndex !== null ? 'Update' : 'Add'} Question
@@ -680,8 +680,8 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 )}
 
                 {/* Submit Quiz */}
-                <div className="bg-white rounded-2xl shadow-lg p-8">
-                    <div className="flex justify-between items-center">
+                <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                         <div>
                             <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Publish?</h3>
                             <p className="text-gray-600">
@@ -691,7 +691,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                         <button
                             onClick={handleSubmitQuiz}
                             disabled={isSubmitting || quizData.questions.length === 0}
-                            className="flex items-center px-8 py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full sm:w-auto justify-center flex items-center px-8 py-4 bg-green-600 text-white rounded-xl font-bold text-base sm:text-lg hover:bg-green-700 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? (
                                 <>

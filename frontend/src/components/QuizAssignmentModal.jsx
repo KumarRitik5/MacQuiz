@@ -212,14 +212,14 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
     const unassignedCount = students.length - selectedStudents.length;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 flex justify-between items-center">
-                    <div className="flex items-center space-x-3">
+                <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                    <div className="flex items-center space-x-3 min-w-0">
                         <Users size={28} />
                         <div>
-                            <h2 className="text-2xl font-bold">Assign Students to Quiz</h2>
+                            <h2 className="text-xl sm:text-2xl font-bold">Assign Students to Quiz</h2>
                             <p className="text-purple-100 text-sm">{quiz.title}</p>
                         </div>
                     </div>
@@ -232,10 +232,10 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                     {/* Live Session Settings */}
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 space-y-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div className="flex items-center gap-3">
                                 <Calendar size={24} className="text-blue-600" />
                                 <div>
@@ -285,7 +285,7 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                     </div>
 
                     {/* Statistics */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
                             <Users size={24} className="mx-auto text-blue-600 mb-2" />
                             <p className="text-3xl font-bold text-blue-900">{students.length}</p>
@@ -340,7 +340,7 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                     </div>
 
                     {/* Select All Button */}
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                         <button
                             onClick={handleSelectAll}
                             className="flex items-center gap-2 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition font-medium text-sm"
@@ -379,7 +379,7 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                                             onChange={() => handleToggleStudent(student.id)}
                                             className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
                                         />
-                                        <div className="ml-4 flex-1 grid grid-cols-4 gap-4">
+                                        <div className="ml-4 flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-4">
                                             <div>
                                                 <p className="font-semibold text-gray-900 text-sm">
                                                     {`${student.first_name || ''} ${student.last_name || ''}`.trim() || 'N/A'}
@@ -416,7 +416,7 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="border-t p-6 bg-gray-50 flex justify-between items-center">
+                <div className="border-t p-4 sm:p-6 bg-gray-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div className="text-sm">
                         <p className="font-semibold text-gray-900">
                             {selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} selected
@@ -427,18 +427,18 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                                 : 'Quiz will be immediately available to selected students'}
                         </p>
                     </div>
-                    <div className="flex space-x-3">
+                    <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3 sm:space-x-3">
                         <button
                             onClick={onClose}
                             disabled={isLoading}
-                            className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition disabled:opacity-50 font-medium"
+                            className="w-full sm:w-auto px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition disabled:opacity-50 font-medium"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSaveAssignment}
                             disabled={isLoading || selectedStudents.length === 0}
-                            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                            className="w-full sm:w-auto px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
                         >
                             {isLoading ? 'Saving...' : isLiveSession ? '🟢 Go Live & Assign' : `Assign to ${selectedStudents.length} Student${selectedStudents.length !== 1 ? 's' : ''}`}
                         </button>

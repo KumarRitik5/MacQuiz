@@ -283,14 +283,14 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
     const canUpload = validationResults && validationResults.errorCount === 0 && validationResults.validCount > 0;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 flex justify-between items-center">
-                    <div className="flex items-center space-x-3">
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                    <div className="flex items-center space-x-3 min-w-0">
                         <Users size={28} />
                         <div>
-                            <h2 className="text-2xl font-bold">Bulk User Upload</h2>
+                            <h2 className="text-xl sm:text-2xl font-bold">Bulk User Upload</h2>
                             <p className="text-blue-100 text-sm">Upload multiple users at once via CSV file</p>
                         </div>
                     </div>
@@ -304,9 +304,9 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                     {/* Template Download Section */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start justify-between">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                         <div className="flex items-start space-x-3">
                             <FileText size={24} className="text-blue-600 mt-1" />
                             <div>
@@ -318,7 +318,7 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                         </div>
                         <button
                             onClick={downloadTemplate}
-                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md whitespace-nowrap"
+                            className="w-full md:w-auto justify-center flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md whitespace-nowrap"
                         >
                             <Download size={18} className="mr-2" />
                             Download Template
@@ -326,7 +326,7 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                     </div>
 
                     {/* File Upload Section */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition">
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition">
                         <input
                             type="file"
                             accept=".csv"
@@ -360,7 +360,7 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                     <h3 className="font-bold text-lg text-gray-800 mb-3">Validation Summary</h3>
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                                         <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                                             <p className="text-2xl font-bold text-gray-800">{validationResults.totalRows}</p>
                                             <p className="text-xs text-gray-600">Total Rows</p>
@@ -576,7 +576,7 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                 </div>
 
                 {/* Footer Actions */}
-                <div className="border-t p-6 bg-gray-50 flex justify-between items-center">
+                <div className="border-t p-4 sm:p-6 bg-gray-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div className="text-sm space-y-1">
                         {canUpload && validationResults && (
                             <>
@@ -598,18 +598,18 @@ student,Charlie,Brown,charlie.brown@example.com,password123,(555) 123-4567,EE001
                             </p>
                         )}
                     </div>
-                    <div className="flex space-x-3">
+                    <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3 sm:space-x-3">
                         <button
                             onClick={handleClose}
                             disabled={isProcessing}
-                            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
+                            className="w-full sm:w-auto px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleUpload}
                             disabled={!canUpload || isProcessing}
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                            className="w-full sm:w-auto justify-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
                         >
                             {isProcessing ? (
                                 <>

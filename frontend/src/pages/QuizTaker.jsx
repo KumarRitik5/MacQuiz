@@ -388,12 +388,12 @@ const QuizTaker = () => {
             {/* Header Bar */}
             <div className="bg-white shadow-lg border-b-4 border-blue-600 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         {/* Quiz Info */}
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 min-w-0">
                             <FileText className="text-blue-600" size={28} />
-                            <div>
-                                <h1 className="text-xl font-bold text-gray-900">{quiz?.title}</h1>
+                            <div className="min-w-0">
+                                <h1 className="text-lg sm:text-xl font-bold text-gray-900 break-words">{quiz?.title}</h1>
                                 <p className="text-sm text-gray-500">
                                     Question {currentQuestionIndex + 1} of {totalQuestions}
                                 </p>
@@ -401,14 +401,14 @@ const QuizTaker = () => {
                         </div>
 
                         {/* Timer */}
-                        <div className="flex items-center space-x-6">
+                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-6 w-full sm:w-auto">
                             {quiz?.is_live_session && (
                                 <div className="flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-full border-2 border-red-500 animate-pulse">
                                     <Circle className="fill-current mr-2" size={12} />
                                     <span className="text-sm font-bold">LIVE</span>
                                 </div>
                             )}
-                            <div className="text-right">
+                            <div className="text-right min-w-0 flex-1 sm:flex-none">
                                 <div className="text-xs text-gray-500 mb-1">
                                     {quiz?.is_live_session ? 'Session Ends In' : 'Time Remaining'}
                                 </div>
@@ -421,7 +421,7 @@ const QuizTaker = () => {
                                     {formatTime(timeRemaining)}
                                 </div>
                                 {/* Timer bar */}
-                                <div className="mt-2 w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="mt-2 w-full sm:w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
                                     <div 
                                         className={`h-full transition-all duration-1000 ${
                                             timePercentage < 10 ? 'bg-red-500' :
@@ -437,14 +437,14 @@ const QuizTaker = () => {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                     {/* Question Card */}
                     <div className="lg:col-span-3">
                         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-blue-100">
                             {/* Question Header */}
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-white">
-                                <div className="flex items-center justify-between mb-2">
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 sm:px-6 md:px-8 py-5 sm:py-6 text-white">
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                                     <span className="text-sm font-semibold bg-white/20 px-4 py-1 rounded-full">
                                         Question {currentQuestionIndex + 1}/{totalQuestions}
                                     </span>
@@ -452,13 +452,13 @@ const QuizTaker = () => {
                                         {currentQuestion?.marks || 1} {currentQuestion?.marks === 1 ? 'Mark' : 'Marks'}
                                     </span>
                                 </div>
-                                <h2 className="text-2xl font-bold leading-relaxed">
+                                <h2 className="text-xl sm:text-2xl font-bold leading-relaxed break-words">
                                     {currentQuestion?.question_text}
                                 </h2>
                             </div>
 
                             {/* Options */}
-                            <div className="p-8 space-y-4">
+                            <div className="p-4 sm:p-6 md:p-8 space-y-4">
                                 {currentQuestion?.question_type === 'mcq' && (
                                     <>
                                         {['A', 'B', 'C', 'D'].map((option) => {
@@ -472,21 +472,21 @@ const QuizTaker = () => {
                                                 <button
                                                     key={option}
                                                     onClick={() => handleAnswerSelect(currentQuestion?.id, option)}
-                                                    className={`w-full text-left p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${
+                                                    className={`w-full text-left p-4 sm:p-5 md:p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${
                                                         isSelected
                                                             ? 'border-blue-600 bg-blue-50 shadow-lg'
                                                             : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                                                     }`}
                                                 >
                                                     <div className="flex items-center space-x-4">
-                                                        <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                                                        <div className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold ${
                                                             isSelected
                                                                 ? 'bg-blue-600 text-white'
                                                                 : 'bg-gray-100 text-gray-600'
                                                         }`}>
                                                             {option}
                                                         </div>
-                                                        <span className={`text-lg flex-1 ${
+                                                        <span className={`text-base sm:text-lg flex-1 break-words ${
                                                             isSelected ? 'text-blue-900 font-semibold' : 'text-gray-700'
                                                         }`}>
                                                             {optionText}
@@ -509,21 +509,21 @@ const QuizTaker = () => {
                                                 <button
                                                     key={option}
                                                     onClick={() => handleAnswerSelect(currentQuestion?.id, option)}
-                                                    className={`w-full text-left p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${
+                                                    className={`w-full text-left p-4 sm:p-5 md:p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${
                                                         isSelected
                                                             ? 'border-blue-600 bg-blue-50 shadow-lg'
                                                             : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                                                     }`}
                                                 >
                                                     <div className="flex items-center space-x-4">
-                                                        <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
+                                                        <div className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
                                                             isSelected
                                                                 ? 'bg-blue-600 text-white'
                                                                 : 'bg-gray-100 text-gray-600'
                                                         }`}>
                                                             {option === 'True' ? <Check size={24} /> : <X size={24} />}
                                                         </div>
-                                                        <span className={`text-xl font-semibold flex-1 ${
+                                                        <span className={`text-lg sm:text-xl font-semibold flex-1 ${
                                                             isSelected ? 'text-blue-900' : 'text-gray-700'
                                                         }`}>
                                                             {option}
@@ -540,11 +540,11 @@ const QuizTaker = () => {
                             </div>
 
                             {/* Navigation */}
-                            <div className="px-8 py-6 bg-gray-50 flex justify-between items-center border-t">
+                            <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 bg-gray-50 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center border-t">
                                 <button
                                     onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
                                     disabled={currentQuestionIndex === 0}
-                                    className="flex items-center px-6 py-3 bg-white border-2 border-gray-300 rounded-xl text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition"
+                                    className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-white border-2 border-gray-300 rounded-xl text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition"
                                 >
                                     <ChevronLeft size={20} className="mr-2" />
                                     Previous
@@ -554,7 +554,7 @@ const QuizTaker = () => {
                                     <button
                                         onClick={() => setShowSubmitConfirm(true)}
                                         disabled={isSubmitting}
-                                        className="flex items-center px-8 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
+                                        className="w-full sm:w-auto justify-center flex items-center px-8 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
                                     >
                                         <Send size={20} className="mr-2" />
                                         Submit Quiz
@@ -562,7 +562,7 @@ const QuizTaker = () => {
                                 ) : (
                                     <button
                                         onClick={() => setCurrentQuestionIndex(Math.min(totalQuestions - 1, currentQuestionIndex + 1))}
-                                        className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
+                                        className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
                                     >
                                         Next
                                         <ChevronRight size={20} className="ml-2" />
@@ -574,7 +574,7 @@ const QuizTaker = () => {
 
                     {/* Question Navigator */}
                     <div className="lg:col-span-1">
-                        <div className="bg-white rounded-2xl shadow-xl p-6 sticky top-24">
+                        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:sticky lg:top-24">
                             <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
                                 <FileText size={20} className="mr-2 text-blue-600" />
                                 Question Navigator
@@ -595,7 +595,7 @@ const QuizTaker = () => {
                             </div>
 
                             {/* Question Grid */}
-                            <div className="grid grid-cols-5 gap-2">
+                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                                 {quiz?.questions?.map((q, idx) => {
                                     const isAnswered = answers[q.id] !== undefined;
                                     const isCurrent = idx === currentQuestionIndex;
@@ -651,7 +651,7 @@ const QuizTaker = () => {
             {/* Submit Confirmation Modal */}
             {showSubmitConfirm && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-5 sm:p-8">
                         <div className="text-center">
                             <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <AlertCircle className="text-yellow-600" size={32} />
@@ -668,7 +668,7 @@ const QuizTaker = () => {
                             <p className="text-sm text-gray-500 mb-6">
                                 Are you sure you want to submit? You cannot change your answers after submission.
                             </p>
-                            <div className="flex space-x-4">
+                            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:space-x-4">
                                 <button
                                     onClick={() => setShowSubmitConfirm(false)}
                                     className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-100 transition"

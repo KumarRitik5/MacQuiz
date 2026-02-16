@@ -129,21 +129,21 @@ const QuizResult = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-8">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-4 sm:py-8">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Hero Section */}
-                <div className={`bg-gradient-to-r ${passed ? 'from-green-600 to-emerald-600' : 'from-red-600 to-pink-600'} text-white rounded-3xl shadow-2xl p-12 mb-8 text-center`}>
+                <div className={`bg-gradient-to-r ${passed ? 'from-green-600 to-emerald-600' : 'from-red-600 to-pink-600'} text-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 md:p-12 mb-8 text-center`}>
                     <div className="mb-6">
                         {passed ? (
-                            <Trophy size={80} className="mx-auto animate-bounce" />
+                            <Trophy size={64} className="mx-auto animate-bounce" />
                         ) : (
-                            <Target size={80} className="mx-auto" />
+                            <Target size={64} className="mx-auto" />
                         )}
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold mb-4">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
                         {passed ? 'Congratulations! 🎉' : 'Quiz Completed'}
                     </h1>
-                    <p className="text-xl md:text-2xl text-white/90">
+                    <p className="text-lg sm:text-xl md:text-2xl text-white/90">
                         {passed ? 'You passed the quiz!' : 'Keep practicing, you\'ll do better next time!'}
                     </p>
                 </div>
@@ -151,8 +151,8 @@ const QuizResult = () => {
                 {/* Score Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     {/* Score */}
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center border-2 border-blue-100">
-                        <div className="text-6xl font-bold text-blue-600 mb-2">
+                    <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 text-center border-2 border-blue-100">
+                        <div className="text-4xl sm:text-6xl font-bold text-blue-600 mb-2">
                             {result?.score || 0}
                         </div>
                         <div className="text-gray-500 text-sm uppercase tracking-wide mb-1">Your Score</div>
@@ -162,8 +162,8 @@ const QuizResult = () => {
                     </div>
 
                     {/* Percentage */}
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center border-2 border-purple-100">
-                        <div className={`text-6xl font-bold mb-2 ${passed ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 text-center border-2 border-purple-100">
+                        <div className={`text-4xl sm:text-6xl font-bold mb-2 ${passed ? 'text-green-600' : 'text-red-600'}`}>
                             {percentage.toFixed(1)}%
                         </div>
                         <div className="text-gray-500 text-sm uppercase tracking-wide mb-1">Percentage</div>
@@ -180,8 +180,8 @@ const QuizResult = () => {
                     </div>
 
                     {/* Grade */}
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center border-2 border-yellow-100">
-                        <div className="text-6xl font-bold text-yellow-600 mb-2">
+                    <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 text-center border-2 border-yellow-100">
+                        <div className="text-4xl sm:text-6xl font-bold text-yellow-600 mb-2">
                             {grade}
                         </div>
                         <div className="text-gray-500 text-sm uppercase tracking-wide mb-1">Grade</div>
@@ -200,7 +200,7 @@ const QuizResult = () => {
                 </div>
 
                 {/* Quiz Details */}
-                <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
+                <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 mb-8">
                     <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
                         <BarChart3 className="mr-3 text-blue-600" size={28} />
                         Quiz Details
@@ -213,7 +213,7 @@ const QuizResult = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Correct Answers</div>
-                                <div className="text-2xl font-bold text-gray-900">
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {correctAnswers} / {totalQuestions}
                                 </div>
                             </div>
@@ -225,7 +225,7 @@ const QuizResult = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Wrong Answers</div>
-                                <div className="text-2xl font-bold text-gray-900">
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {wrongAnswers}
                                 </div>
                             </div>
@@ -237,7 +237,7 @@ const QuizResult = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Time Taken</div>
-                                <div className="text-2xl font-bold text-gray-900">
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {result?.time_taken || 'N/A'}
                                 </div>
                             </div>
@@ -249,7 +249,7 @@ const QuizResult = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Accuracy</div>
-                                <div className="text-2xl font-bold text-gray-900">
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {accuracy.toFixed(1)}%
                                 </div>
                             </div>
@@ -261,7 +261,7 @@ const QuizResult = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Negative Marks Deducted</div>
-                                <div className="text-2xl font-bold text-gray-900">
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {negativeMarksLost.toFixed(2)}
                                 </div>
                                 <div className="text-xs text-gray-500">
@@ -283,7 +283,7 @@ const QuizResult = () => {
                 </div>
 
                 {/* Performance Message */}
-                <div className={`rounded-2xl shadow-lg p-8 mb-8 ${
+                <div className={`rounded-2xl shadow-lg p-5 sm:p-8 mb-8 ${
                     passed ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200' :
                     'bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200'
                 }`}>

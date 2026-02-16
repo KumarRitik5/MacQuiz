@@ -124,11 +124,11 @@ export default function Login() {
                 backgroundImage: `url(${BG})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-                backgroundAttachment: 'fixed',
+                backgroundAttachment: 'scroll',
                 fontFamily: 'Inter, sans-serif'
             }}
         >
-            <div className="relative z-10 w-full max-w-6xl min-h-[500px] lg:h-[70vh]
+            <div className="relative z-10 w-full max-w-6xl min-h-[420px] sm:min-h-[500px] lg:h-[70vh]
                             rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden
                             backdrop-blur-xl bg-white/10 border border-white/20 
                             flex flex-col lg:flex-row transition duration-500">
