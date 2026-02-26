@@ -161,6 +161,7 @@ alembic upgrade head
 # PostgreSQL safe constraint/index migration (duplicate pre-checks)
 python migrate_postgres_constraints.py          # dry run (recommended first)
 python migrate_postgres_constraints.py --apply  # apply only safe indexes
+python migrate_postgres_constraints.py --apply --auto-fix --backup-file ./pre_dedupe.dump
 ```
 
 ### Code Quality
