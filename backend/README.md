@@ -157,6 +157,10 @@ pytest
 # Using Alembic (setup later if needed)
 alembic revision --autogenerate -m "migration message"
 alembic upgrade head
+
+# PostgreSQL safe constraint/index migration (duplicate pre-checks)
+python migrate_postgres_constraints.py          # dry run (recommended first)
+python migrate_postgres_constraints.py --apply  # apply only safe indexes
 ```
 
 ### Code Quality
