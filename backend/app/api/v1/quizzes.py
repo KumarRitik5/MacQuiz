@@ -465,10 +465,12 @@ async def check_quiz_eligibility(
 
         # Cannot join before start time
         if now < quiz.live_start_time:
+            seconds_until_start = max(0, int((quiz.live_start_time - now).total_seconds()))
             return {
                 "eligible": False,
                 "reason": f"Quiz starts at {quiz.live_start_time}",
-                "scheduled_at": quiz.live_start_time
+                "scheduled_at": quiz.live_start_time,
+                "seconds_until_start": seconds_until_start,
             }
         
         # 5-minute grace period after start
@@ -508,10 +510,12 @@ async def check_quiz_eligibility(
         grace_end = quiz.scheduled_at + timedelta(minutes=quiz.grace_period_minutes)
         
         if now < quiz.scheduled_at:
+            seconds_until_start = max(0, int((quiz.scheduled_at - now).total_seconds()))
             return {
                 "eligible": False,
                 "reason": f"Quiz starts at {quiz.scheduled_at}",
-                "scheduled_at": quiz.scheduled_at
+                "scheduled_at": quiz.scheduled_at,
+                "seconds_until_start": seconds_until_start,
             }
         
         if now > grace_end:

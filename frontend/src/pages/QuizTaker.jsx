@@ -49,10 +49,13 @@ const QuizTaker = () => {
         return parseStartDate(match[1]);
     }, [parseStartDate]);
 
-    const openPreStartView = useCallback((message, explicitStart = null) => {
+    const openPreStartView = useCallback((message, explicitStart = null, explicitSeconds = null) => {
         const parsedStart = parseStartDate(explicitStart) || extractStartDateFromMessage(message);
         setPreStartMessage(message || 'Quiz has not started yet.');
         setPreStartAt(parsedStart);
+        if (typeof explicitSeconds === 'number' && Number.isFinite(explicitSeconds)) {
+            setPreStartCountdown(Math.max(0, Math.floor(explicitSeconds)));
+        }
         setIsRedirecting(false);
         setIsLoading(false);
     }, [extractStartDateFromMessage, parseStartDate]);
@@ -83,7 +86,11 @@ const QuizTaker = () => {
                             const reason = eligibilityData.reason || 'You cannot take this quiz at this time.';
                             const reasonLower = String(reason).toLowerCase();
                             if (reasonLower.includes('starts at') || reasonLower.includes('not started')) {
-                                openPreStartView(reason, eligibilityData.scheduled_at || eligibilityData.live_start_time);
+                                openPreStartView(
+                                    reason,
+                                    eligibilityData.scheduled_at || eligibilityData.live_start_time,
+                                    eligibilityData.seconds_until_start
+                                );
                                 return;
                             }
                             error(reason);
@@ -192,6 +199,19 @@ const QuizTaker = () => {
     }, [quizId, user?.role, error, navigate, success]);
 
     useEffect(() => {
+        if (preStartCountdown !== null) {
+            if (preStartCountdown <= 0) {
+                return;
+            }
+            const interval = setInterval(() => {
+                setPreStartCountdown((prev) => {
+                    if (prev === null || prev <= 0) return 0;
+                    return prev - 1;
+                });
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+
         if (!preStartAt) {
             setPreStartCountdown(null);
             return;
