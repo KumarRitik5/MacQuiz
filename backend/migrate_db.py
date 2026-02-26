@@ -4,6 +4,7 @@ Recreates the database with the updated schema including phone_number field
 """
 import sys
 import os
+import argparse
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,21 +14,27 @@ from app.models.models import User, Quiz, Question, QuizAttempt
 from app.core.security import get_password_hash
 from sqlalchemy.orm import Session
 
+def upgrade_database():
+    """Create any missing tables/columns represented by current ORM metadata."""
+    print("🔄 Applying safe schema upgrade (non-destructive)...")
+    print("✨ Creating missing tables if needed...")
+    Base.metadata.create_all(bind=engine)
+    print("✅ Safe upgrade completed (existing data preserved)")
+
+
 def reset_database():
-    """Drop all tables and recreate them with updated schema"""
-    print("🔄 Resetting database...")
-    
+    """Drop all tables and recreate them with updated schema."""
+    print("🔄 Resetting database (DESTRUCTIVE)...")
+
     # Drop all tables
     print("📦 Dropping existing tables...")
     Base.metadata.drop_all(bind=engine)
-    
+
     # Create all tables with new schema
     print("✨ Creating tables with updated schema...")
     Base.metadata.create_all(bind=engine)
-    
-    print("✅ Database schema updated successfully!")
-    print("📋 Tables created: users, quizzes, questions, quiz_attempts")
-    print("🆕 New field added: users.phone_number")
+
+    print("✅ Database schema reset successfully!")
 
 def create_admin_user():
     """Create default admin user"""
@@ -68,14 +75,26 @@ def create_admin_user():
         db.close()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="MacQuiz database migration helper")
+    parser.add_argument(
+        "--force-reset",
+        action="store_true",
+        help="Drop and recreate all tables (DESTRUCTIVE)",
+    )
+    args = parser.parse_args()
+
     print("=" * 50)
     print("  MacQuiz Database Migration")
-    print("  Adding phone_number field support")
+    print("  Safe upgrade by default")
     print("=" * 50)
     print()
     
     try:
-        reset_database()
+        if args.force_reset:
+            print("⚠️  --force-reset enabled: this will delete all existing data")
+            reset_database()
+        else:
+            upgrade_database()
         create_admin_user()
         
         print()

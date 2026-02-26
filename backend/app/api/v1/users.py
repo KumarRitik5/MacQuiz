@@ -100,6 +100,8 @@ async def bulk_upload_users(
         
         created_users = []
         errors = []
+        seen_emails = set()
+        seen_student_ids = set()
         
         for row_num, row in enumerate(csv_reader, start=2):  # start=2 because row 1 is header
             try:
@@ -129,6 +131,14 @@ async def bulk_upload_users(
                     })
                     continue
                 email = row['email'].strip()
+
+                if email in seen_emails:
+                    errors.append({
+                        "row": row_num,
+                        "email": email,
+                        "error": "Duplicate email in upload file"
+                    })
+                    continue
                 
                 # Check if email already exists
                 if db.query(User).filter(User.email == email).first():
@@ -147,6 +157,15 @@ async def bulk_upload_users(
                             "row": row_num,
                             "email": email,
                             "error": "Student ID is required for students"
+                        })
+                        continue
+
+                    if student_id in seen_student_ids:
+                        errors.append({
+                            "row": row_num,
+                            "email": email,
+                            "student_id": student_id,
+                            "error": "Duplicate student ID in upload file"
                         })
                         continue
                     
@@ -174,6 +193,9 @@ async def bulk_upload_users(
                 )
                 
                 db.add(new_user)
+                seen_emails.add(email)
+                if student_id:
+                    seen_student_ids.add(student_id)
                 created_users.append({
                     "email": email,
                     "name": f"{new_user.first_name} {new_user.last_name}",
@@ -188,7 +210,14 @@ async def bulk_upload_users(
         
         # Commit all users at once
         if created_users:
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Upload contains duplicate or conflicting user data"
+                )
         
         return {
             "success": True,

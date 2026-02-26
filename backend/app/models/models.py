@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.database import Base
@@ -135,6 +135,10 @@ class QuizAttempt(Base):
 
 class Answer(Base):
     __tablename__ = "answers"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "question_id", name="uq_answers_attempt_question"),
+        Index("ix_answers_attempt_question", "attempt_id", "question_id"),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     attempt_id = Column(Integer, ForeignKey("quiz_attempts.id"), nullable=False)
@@ -205,6 +209,10 @@ class QuestionBank(Base):
 class QuizAssignment(Base):
     """Tracks which students are assigned to which quizzes"""
     __tablename__ = "quiz_assignments"
+    __table_args__ = (
+        UniqueConstraint("quiz_id", "student_id", name="uq_quiz_assignments_quiz_student"),
+        Index("ix_quiz_assignments_quiz_student", "quiz_id", "student_id"),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False)

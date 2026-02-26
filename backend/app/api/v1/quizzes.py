@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.db.database import get_db
@@ -47,57 +48,70 @@ async def create_quiz(
         # Calculate live_end_time based on start time + duration
         quiz_data.live_end_time = quiz_data.live_start_time + timedelta(minutes=quiz_data.duration_minutes)
     
-    # Create quiz
-    db_quiz = Quiz(
-        title=quiz_data.title,
-        description=quiz_data.description,
-        creator_id=current_user.id,
-        subject_id=quiz_data.subject_id,
-        department=quiz_data.department,
-        class_year=quiz_data.class_year,
-        scheduled_at=quiz_data.scheduled_at,
-        duration_minutes=quiz_data.duration_minutes,
-        grace_period_minutes=quiz_data.grace_period_minutes,
-        is_live_session=quiz_data.is_live_session,
-        live_start_time=quiz_data.live_start_time,
-        live_end_time=quiz_data.live_end_time,
-        is_active=False,
-        total_marks=total_marks,
-        marks_per_correct=quiz_data.marks_per_correct,
-        negative_marking=quiz_data.negative_marking
-    )
-    
-    db.add(db_quiz)
-    db.commit()
-    db.refresh(db_quiz)
-    
-    # Create questions
-    for idx, question_data in enumerate(quiz_data.questions):
-        # If question is from bank, increment usage count
-        if question_data.question_bank_id:
-            bank_question = db.query(QuestionBank).filter(
-                QuestionBank.id == question_data.question_bank_id
-            ).first()
-            if bank_question:
-                bank_question.times_used += 1
-        
-        db_question = Question(
-            quiz_id=db_quiz.id,
-            question_bank_id=question_data.question_bank_id,
-            question_text=question_data.question_text,
-            question_type=question_data.question_type,
-            option_a=question_data.option_a,
-            option_b=question_data.option_b,
-            option_c=question_data.option_c,
-            option_d=question_data.option_d,
-            correct_answer=question_data.correct_answer,
-            marks=question_data.marks,
-            order=idx
+    try:
+        # Create quiz
+        db_quiz = Quiz(
+            title=quiz_data.title,
+            description=quiz_data.description,
+            creator_id=current_user.id,
+            subject_id=quiz_data.subject_id,
+            department=quiz_data.department,
+            class_year=quiz_data.class_year,
+            scheduled_at=quiz_data.scheduled_at,
+            duration_minutes=quiz_data.duration_minutes,
+            grace_period_minutes=quiz_data.grace_period_minutes,
+            is_live_session=quiz_data.is_live_session,
+            live_start_time=quiz_data.live_start_time,
+            live_end_time=quiz_data.live_end_time,
+            is_active=False,
+            total_marks=total_marks,
+            marks_per_correct=quiz_data.marks_per_correct,
+            negative_marking=quiz_data.negative_marking
         )
-        db.add(db_question)
-    
-    db.commit()
-    db.refresh(db_quiz)
+
+        db.add(db_quiz)
+        db.flush()  # Get db_quiz.id without committing the transaction
+
+        # Create questions
+        for idx, question_data in enumerate(quiz_data.questions):
+            # If question is from bank, increment usage count
+            if question_data.question_bank_id:
+                bank_question = db.query(QuestionBank).filter(
+                    QuestionBank.id == question_data.question_bank_id
+                ).first()
+                if not bank_question:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Question bank item {question_data.question_bank_id} not found"
+                    )
+                bank_question.times_used += 1
+
+            db_question = Question(
+                quiz_id=db_quiz.id,
+                question_bank_id=question_data.question_bank_id,
+                question_text=question_data.question_text,
+                question_type=question_data.question_type,
+                option_a=question_data.option_a,
+                option_b=question_data.option_b,
+                option_c=question_data.option_c,
+                option_d=question_data.option_d,
+                correct_answer=question_data.correct_answer,
+                marks=question_data.marks,
+                order=idx
+            )
+            db.add(db_question)
+
+        db.commit()
+        db.refresh(db_quiz)
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create quiz"
+        )
     
     # Return formatted quiz response with attempts count
     from app.models.models import QuizAttempt
@@ -571,12 +585,13 @@ async def update_quiz(
     assigned_student_ids = update_data.pop('assigned_student_ids', None)
     if assigned_student_ids is not None:
         from app.models.models import QuizAssignment
+        unique_student_ids = list(dict.fromkeys(assigned_student_ids))
         
         # Delete existing assignments
         db.query(QuizAssignment).filter(QuizAssignment.quiz_id == quiz_id).delete()
         
         # Add new assignments
-        for student_id in assigned_student_ids:
+        for student_id in unique_student_ids:
             assignment = QuizAssignment(quiz_id=quiz_id, student_id=student_id)
             db.add(assignment)
     
