@@ -192,34 +192,6 @@ async def get_all_quizzes(
     result = []
     for quiz in quizzes:
         from app.models.models import QuizAttempt
-        from datetime import datetime, timedelta
-        
-        # For students: Filter live session quizzes by timing
-        if current_user.role == "student" and quiz.is_live_session:
-            now = datetime.now()
-            if quiz.live_start_time and quiz.live_end_time:
-                active_attempt = db.query(QuizAttempt).filter(
-                    QuizAttempt.quiz_id == quiz.id,
-                    QuizAttempt.student_id == current_user.id,
-                    QuizAttempt.is_completed == False
-                ).first()
-
-                # Only show quiz during the session (from start time)
-                # Skip if current time is before start time
-                if now < quiz.live_start_time:
-                    continue
-
-                # Skip if session has ended
-                if now > quiz.live_end_time:
-                    continue
-
-                # Allow joining up to 5 minutes after start (grace period)
-                grace_end = quiz.live_start_time + timedelta(minutes=5)
-
-                # Skip if grace period has expired
-                # But allow reconnection anytime during active session if student already has an in-progress attempt
-                if now > grace_end and not active_attempt:
-                    continue
         
         quiz_dict = {
             "id": quiz.id,
