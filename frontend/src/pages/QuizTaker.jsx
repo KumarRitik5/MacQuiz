@@ -25,7 +25,37 @@ const QuizTaker = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [isRedirecting, setIsRedirecting] = useState(false);
+    const [preStartMessage, setPreStartMessage] = useState('');
+    const [preStartAt, setPreStartAt] = useState(null);
+    const [preStartCountdown, setPreStartCountdown] = useState(null);
     const initStartedRef = useRef(false);
+
+    const parseStartDate = useCallback((value) => {
+        if (!value) return null;
+        if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+        const raw = String(value).trim();
+        if (!raw) return null;
+
+        const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }, []);
+
+    const extractStartDateFromMessage = useCallback((message) => {
+        if (!message) return null;
+        const match = String(message).match(/starts?\s+at\s+(.+)$/i);
+        if (!match?.[1]) return null;
+        return parseStartDate(match[1]);
+    }, [parseStartDate]);
+
+    const openPreStartView = useCallback((message, explicitStart = null) => {
+        const parsedStart = parseStartDate(explicitStart) || extractStartDateFromMessage(message);
+        setPreStartMessage(message || 'Quiz has not started yet.');
+        setPreStartAt(parsedStart);
+        setIsRedirecting(false);
+        setIsLoading(false);
+    }, [extractStartDateFromMessage, parseStartDate]);
 
     // Load quiz and start attempt
     useEffect(() => {
@@ -50,7 +80,13 @@ const QuizTaker = () => {
                         const eligibilityData = await quizAPI.checkEligibility(quizId);
                         
                         if (!eligibilityData.eligible) {
-                            error(eligibilityData.reason || 'You cannot take this quiz at this time.');
+                            const reason = eligibilityData.reason || 'You cannot take this quiz at this time.';
+                            const reasonLower = String(reason).toLowerCase();
+                            if (reasonLower.includes('starts at') || reasonLower.includes('not started')) {
+                                openPreStartView(reason, eligibilityData.scheduled_at || eligibilityData.live_start_time);
+                                return;
+                            }
+                            error(reason);
                             setIsRedirecting(true);
                             setTimeout(() => navigate('/dashboard'), 2000);
                             return;
@@ -136,6 +172,12 @@ const QuizTaker = () => {
                 success(previewMessage);
             } catch (err) {
                 const errorMessage = err.data?.detail || err.message || 'Failed to start quiz';
+                const normalizedError = String(errorMessage).toLowerCase();
+                if (normalizedError.includes('starts at') || normalizedError.includes('not started yet')) {
+                    openPreStartView(errorMessage);
+                    return;
+                }
+
                 error(errorMessage);
                 console.error('Quiz start error:', err);
                 // Only navigate back for quiz-specific errors, not auth errors
@@ -148,6 +190,22 @@ const QuizTaker = () => {
 
         initQuiz();
     }, [quizId, user?.role, error, navigate, success]);
+
+    useEffect(() => {
+        if (!preStartAt) {
+            setPreStartCountdown(null);
+            return;
+        }
+
+        const tick = () => {
+            const remaining = Math.max(0, Math.floor((preStartAt.getTime() - Date.now()) / 1000));
+            setPreStartCountdown(remaining);
+        };
+
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [preStartAt]);
 
     // Periodic server timer sync (authoritative for live and regular timed quizzes)
     useEffect(() => {
@@ -259,6 +317,14 @@ const QuizTaker = () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
+    const formatCountdown = (seconds) => {
+        if (seconds === null || seconds === undefined) return '--:--:--';
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
     const handleAnswerSelect = async (questionId, answer) => {
         // Prevent answer changes when time has expired
         if (timeRemaining !== null && timeRemaining <= 0) {
@@ -323,6 +389,40 @@ const QuizTaker = () => {
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-gray-600 text-lg">Redirecting to dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (preStartMessage) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+                <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-xl w-full">
+                    <Clock className="w-14 h-14 text-blue-600 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Quiz Not Started Yet</h2>
+                    <p className="text-gray-600 mb-4">{preStartMessage}</p>
+                    {preStartAt && (
+                        <div className="mb-6">
+                            <p className="text-sm text-gray-500">Scheduled start</p>
+                            <p className="font-semibold text-gray-800">{preStartAt.toLocaleString()}</p>
+                            <p className="mt-3 text-sm text-gray-500">Starts in</p>
+                            <p className="text-2xl font-mono font-bold text-blue-700">{formatCountdown(preStartCountdown)}</p>
+                        </div>
+                    )}
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                            Retry
+                        </button>
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                        >
+                            Back to Dashboard
+                        </button>
+                    </div>
                 </div>
             </div>
         );
