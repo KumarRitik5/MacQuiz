@@ -3394,7 +3394,7 @@ const StudentResultsView = () => {
                 </div>
             </div>
 
-            {/* Live Session Monitor
+            {/* Live Session Monitor */}
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-bold text-red-900">Live Session Monitor</h3>
@@ -3481,7 +3481,7 @@ const StudentResultsView = () => {
                 ) : (
                     <p className="text-sm text-red-800">No students are currently in an active quiz session for the selected quiz.</p>
                 )}
-            </div> */}
+            </div>
 
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -3523,7 +3523,7 @@ const StudentResultsView = () => {
             )}
 
             {/* Results Table */}
-            {isLoading ? (
+            {/* {isLoading ? (
                 <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-gray-500">Loading results...</p>
@@ -3617,7 +3617,7 @@ const StudentResultsView = () => {
                     <Trophy size={48} className="mx-auto mb-4 text-gray-400" />
                     <p className="text-gray-500">No quiz results found</p>
                 </div>
-            )}
+            )} */}
         </div>
     );
 };
