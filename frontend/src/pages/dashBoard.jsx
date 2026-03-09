@@ -3394,7 +3394,7 @@ const StudentResultsView = () => {
                 </div>
             </div>
 
-            {/* Live Session Monitor */}
+            {/* Live Session Monitor
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-bold text-red-900">Live Session Monitor</h3>
@@ -3481,7 +3481,7 @@ const StudentResultsView = () => {
                 ) : (
                     <p className="text-sm text-red-800">No students are currently in an active quiz session for the selected quiz.</p>
                 )}
-            </div>
+            </div> */}
 
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
