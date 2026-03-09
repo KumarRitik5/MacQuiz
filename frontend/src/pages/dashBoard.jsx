@@ -3523,7 +3523,7 @@ const StudentResultsView = () => {
             )}
 
             {/* Results Table */}
-            {/* {isLoading ? (
+            {isLoading ? (
                 <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-gray-500">Loading results...</p>
@@ -3617,7 +3617,7 @@ const StudentResultsView = () => {
                     <Trophy size={48} className="mx-auto mb-4 text-gray-400" />
                     <p className="text-gray-500">No quiz results found</p>
                 </div>
-            )} */}
+            )}
         </div>
     );
 };
