@@ -51,13 +51,20 @@ def get_dashboard_stats(
     ) - timedelta(days=1)
     yesterday_end = yesterday_start + timedelta(days=1)
     
-    yesterday_assessments = db.query(QuizAttempt).filter(
+    yesterday_assessments = db.query(QuizAttempt).join(
+        User, User.id == QuizAttempt.student_id
+    ).filter(
+        User.role == "student",
         QuizAttempt.started_at >= yesterday_start,
         QuizAttempt.started_at < yesterday_end
     ).count()
     
     # Total attempts
-    total_attempts = db.query(QuizAttempt).count()
+    total_attempts = db.query(QuizAttempt).join(
+        User, User.id == QuizAttempt.student_id
+    ).filter(
+        User.role == "student"
+    ).count()
     
     return {
         "total_quizzes": total_quizzes,
@@ -121,13 +128,21 @@ def get_teacher_statistics(
     # Students who attempted their quizzes
     students_attempted = db.query(func.count(func.distinct(QuizAttempt.student_id))).join(
         Quiz, Quiz.id == QuizAttempt.quiz_id
-    ).filter(Quiz.creator_id == teacher_id).scalar() or 0
+    ).join(
+        User, User.id == QuizAttempt.student_id
+    ).filter(
+        Quiz.creator_id == teacher_id,
+        User.role == "student"
+    ).scalar() or 0
     
     # Average quiz score
     avg_score = db.query(func.avg(QuizAttempt.percentage)).join(
         Quiz, Quiz.id == QuizAttempt.quiz_id
+    ).join(
+        User, User.id == QuizAttempt.student_id
     ).filter(
         Quiz.creator_id == teacher_id,
+        User.role == "student",
         QuizAttempt.is_completed == True
     ).scalar() or 0
     

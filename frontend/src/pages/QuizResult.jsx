@@ -14,14 +14,58 @@ const QuizResult = () => {
     const { error, success } = useToast();
 
     const [result, setResult] = useState(null);
+    const [reviewSummary, setReviewSummary] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isDownloadingReview, setIsDownloadingReview] = useState(false);
 
     useEffect(() => {
         const fetchResult = async () => {
             try {
-                const data = await attemptAPI.getAttempt(attemptId);
+                const [data, review] = await Promise.all([
+                    attemptAPI.getAttempt(attemptId),
+                    attemptAPI.getAttemptReview(attemptId).catch(() => null),
+                ]);
                 setResult(data);
+
+                if (review?.questions?.length) {
+                    const total = review.questions.length;
+                    let answered = 0;
+                    let correct = 0;
+                    let wrong = 0;
+                    let negativeDeducted = 0;
+
+                    review.questions.forEach((q) => {
+                        const studentAnswer = String(q?.student_answer ?? '').trim().toLowerCase();
+                        const correctAnswer = String(q?.correct_answer ?? '').trim().toLowerCase();
+                        const marksAwarded = Number(q?.marks_awarded ?? 0);
+
+                        if (!studentAnswer) {
+                            return;
+                        }
+
+                        answered += 1;
+
+                        const isCorrect = q?.is_correct === true || studentAnswer === correctAnswer;
+                        if (isCorrect) {
+                            correct += 1;
+                        } else {
+                            wrong += 1;
+                        }
+
+                        if (marksAwarded < 0) {
+                            negativeDeducted += Math.abs(marksAwarded);
+                        }
+                    });
+
+                    setReviewSummary({
+                        totalQuestions: total,
+                        answeredCount: answered,
+                        correctAnswers: correct,
+                        wrongAnswers: wrong,
+                        unattemptedQuestions: Math.max(0, total - answered),
+                        negativeMarksLost: negativeDeducted,
+                    });
+                }
             } catch {
                 error('Failed to load quiz result');
                 navigate('/dashboard');
@@ -47,12 +91,24 @@ const QuizResult = () => {
     const percentage = result?.percentage || 0;
     const grade = getGradeFromPercentage(percentage);
     const passed = grade !== 'F' && grade !== 'N/A';
-    const correctAnswers = result?.correct_answers || 0;
-    const totalQuestions = result?.total_questions || 0;
-    const wrongAnswers = totalQuestions - correctAnswers;
+    const correctAnswers = Number(reviewSummary?.correctAnswers ?? result?.correct_answers ?? 0);
+    const totalQuestions = Number(reviewSummary?.totalQuestions ?? result?.total_questions ?? 0);
+    const incorrectFromApi = result?.incorrect_answers;
+    const answeredFromApi = result?.answered_count;
+
+    // Never assume unanswered questions are wrong.
+    const wrongAnswers = Number(reviewSummary?.wrongAnswers ?? (Number.isFinite(incorrectFromApi)
+        ? Number(incorrectFromApi)
+        : 0));
+    const answeredCount = Number(reviewSummary?.answeredCount ?? (Number.isFinite(answeredFromApi)
+        ? Number(answeredFromApi)
+        : Math.max(0, correctAnswers + wrongAnswers)));
+    const unattemptedQuestions = Number(reviewSummary?.unattemptedQuestions ?? (Number.isFinite(result?.unattempted_questions)
+        ? Number(result.unattempted_questions)
+        : Math.max(0, totalQuestions - answeredCount)));
     const negativeMarkingPerWrong = result?.negative_marking || 0;
-    const negativeMarksLost = wrongAnswers > 0 ? (wrongAnswers * negativeMarkingPerWrong) : 0;
-    const accuracy = totalQuestions > 0 ? ((correctAnswers / totalQuestions) * 100) : 0;
+    const negativeMarksLost = reviewSummary?.negativeMarksLost ?? (wrongAnswers > 0 ? (wrongAnswers * negativeMarkingPerWrong) : 0);
+    const accuracy = answeredCount > 0 ? ((correctAnswers / answeredCount) * 100) : 0;
     const hasScoreAccuracyGap = Math.abs(accuracy - percentage) >= 5;
 
     const handleDownloadAttemptReview = async () => {
@@ -227,6 +283,18 @@ const QuizResult = () => {
                                 <div className="text-sm text-gray-500">Wrong Answers</div>
                                 <div className="text-xl sm:text-2xl font-bold text-gray-900">
                                     {wrongAnswers}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                                <Target className="text-gray-600" size={24} />
+                            </div>
+                            <div>
+                                <div className="text-sm text-gray-500">Unattempted</div>
+                                <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                                    {unattemptedQuestions}
                                 </div>
                             </div>
                         </div>

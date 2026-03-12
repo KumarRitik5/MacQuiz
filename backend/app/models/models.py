@@ -119,7 +119,7 @@ class QuizAttempt(Base):
     percentage = Column(Float, nullable=True)
     
     # Timing
-    started_at = Column(DateTime, default=datetime.now)  # Uses datetime.now() at insertion
+    started_at = Column(DateTime, default=datetime.utcnow)  # Store UTC-naive for consistent timer comparisons
     submitted_at = Column(DateTime, nullable=True)
     time_taken_minutes = Column(Float, nullable=True)  # Actual time taken
     

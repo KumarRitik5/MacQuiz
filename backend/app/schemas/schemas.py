@@ -278,6 +278,9 @@ class QuizAttemptResponse(BaseModel):
     # Additional fields for quiz result display
     quiz_title: Optional[str] = None
     correct_answers: Optional[int] = None
+    answered_count: Optional[int] = None
+    incorrect_answers: Optional[int] = None
+    unattempted_questions: Optional[int] = None
     total_questions: Optional[int] = None
     quiz_total_marks: Optional[float] = None
     negative_marking: Optional[float] = None

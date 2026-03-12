@@ -15,6 +15,61 @@ router = APIRouter()
 
 # Allow a small clock-skew tolerance so students are not blocked at countdown zero.
 START_TIME_TOLERANCE_SECONDS = 90
+# Live sessions should start strictly at configured time.
+LIVE_START_TIME_TOLERANCE_SECONDS = 0
+
+
+def _normalized_answer_text(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def _safe_minutes_value(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    return max(0.0, float(value))
+
+
+def _format_minutes_seconds(value: Optional[float]) -> Optional[str]:
+    safe_value = _safe_minutes_value(value)
+    if safe_value is None:
+        return None
+    minutes = int(safe_value)
+    seconds = int((safe_value - minutes) * 60)
+    return f"{minutes}m {seconds}s"
+
+
+def _naive_datetime_remaining_seconds(target_time: datetime) -> float:
+    """
+    Compute remaining seconds for DB-naive datetimes that may represent either UTC or local time.
+    Pick the smallest non-negative delta to avoid timer inflation on page refresh.
+    """
+    now_utc = datetime.utcnow()
+    now_local = datetime.now()
+    utc_delta = (target_time - now_utc).total_seconds()
+    local_delta = (target_time - now_local).total_seconds()
+
+    candidates = [utc_delta, local_delta]
+    non_negative = [value for value in candidates if value >= 0]
+    if non_negative:
+        return min(non_negative)
+    return max(candidates)
+
+
+def _naive_datetime_elapsed_seconds(start_time: datetime) -> float:
+    """
+    Compute elapsed seconds for DB-naive datetimes that may represent UTC or local time.
+    Pick the smallest non-negative delta to avoid inflated elapsed durations.
+    """
+    now_utc = datetime.utcnow()
+    now_local = datetime.now()
+    utc_delta = (now_utc - start_time).total_seconds()
+    local_delta = (now_local - start_time).total_seconds()
+
+    candidates = [utc_delta, local_delta]
+    non_negative = [value for value in candidates if value >= 0]
+    if non_negative:
+        return min(non_negative)
+    return max(candidates)
 
 
 def _finalize_expired_attempt(db: Session, attempt: QuizAttempt, quiz: Quiz, now: datetime) -> None:
@@ -29,27 +84,33 @@ def _finalize_expired_attempt(db: Session, attempt: QuizAttempt, quiz: Quiz, now
         if not answer:
             continue
 
-        student_answer = (answer.answer_text or "").strip().lower()
+        student_answer = _normalized_answer_text(answer.answer_text)
         correct_answer = (question.correct_answer or "").strip().lower()
-        is_correct = student_answer == correct_answer
-
-        if is_correct:
-            marks_awarded = float(question.marks or 0)
+        if not student_answer:
+            # Unanswered question: no penalty, no correctness flag.
+            is_correct = None
+            marks_awarded = 0.0
         else:
-            marks_awarded = -float(quiz.negative_marking or 0) if float(quiz.negative_marking or 0) > 0 else 0.0
+            is_correct = student_answer == correct_answer
+
+            if is_correct:
+                marks_awarded = float(question.marks or 0)
+            else:
+                marks_awarded = -float(quiz.negative_marking or 0) if float(quiz.negative_marking or 0) > 0 else 0.0
 
         answer.is_correct = is_correct
         answer.marks_awarded = marks_awarded
         total_score += marks_awarded
 
     time_taken = (now - attempt.started_at).total_seconds() / 60 if attempt.started_at else 0
+    time_taken = max(0.0, time_taken)
     if quiz.duration_minutes and time_taken > quiz.duration_minutes:
         time_taken = quiz.duration_minutes
 
     attempt.score = max(0.0, total_score)
     attempt.percentage = (attempt.score / attempt.total_marks * 100) if attempt.total_marks > 0 else 0
     attempt.submitted_at = now
-    attempt.time_taken_minutes = round(time_taken, 2)
+    attempt.time_taken_minutes = round(max(0.0, time_taken), 2)
     attempt.is_completed = True
     attempt.is_graded = True
 
@@ -189,6 +250,8 @@ async def start_quiz_attempt(
             detail="Quiz is not active"
         )
     
+    # Quiz schedule datetimes are stored as naive timestamps in this project.
+    # Compare against local server time to avoid early-join due UTC/local skew.
     now = datetime.now()
 
     # For teachers/admins previewing: delete any existing incomplete attempts to start fresh
@@ -213,7 +276,15 @@ async def start_quiz_attempt(
         )
 
         # Return existing active attempt to allow reconnection.
+        # For live quizzes, still enforce start-time boundary before allowing reconnect.
         if active_attempt:
+            if quiz.is_live_session and quiz.live_start_time:
+                live_join_open_time = quiz.live_start_time - timedelta(seconds=LIVE_START_TIME_TOLERANCE_SECONDS)
+                if now < live_join_open_time:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Live session has not started yet. Starts at {quiz.live_start_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
             return active_attempt
 
         if has_completed_attempt:
@@ -231,21 +302,14 @@ async def start_quiz_attempt(
             )
         
         # Check if session hasn't started yet (with tolerance for minor clock drift)
-        live_join_open_time = quiz.live_start_time - timedelta(seconds=START_TIME_TOLERANCE_SECONDS)
+        live_join_open_time = quiz.live_start_time - timedelta(seconds=LIVE_START_TIME_TOLERANCE_SECONDS)
         if now < live_join_open_time:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Live session has not started yet. Starts at {quiz.live_start_time.strftime('%H:%M:%S')}"
             )
         
-        # Check if within grace period (5 minutes after start)
-        grace_end = quiz.live_start_time + timedelta(minutes=5)
-        if now > grace_end:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Grace period for joining this quiz has expired (5 minutes after start time)"
-            )
-        
+        # Students can join any time while the live session is active.
         # Check if session has ended
         if now > quiz.live_end_time:
             raise HTTPException(
@@ -329,7 +393,7 @@ async def submit_quiz_attempt(
     is_teacher_or_admin = current_user.role in ["teacher", "admin"]
 
     # Validate deadline
-    now = datetime.now()
+    now = datetime.utcnow()
     if quiz.is_live_session and not is_teacher_or_admin:
         # For live sessions, deadline is the live_end_time regardless of when student started
         if now > quiz.live_end_time:
@@ -358,9 +422,9 @@ async def submit_quiz_attempt(
     if not submission.answers or len(submission.answers) == 0:
         attempt.score = 0
         attempt.percentage = 0
-        attempt.submitted_at = datetime.now()
-        time_taken = (datetime.now() - attempt.started_at).total_seconds() / 60
-        attempt.time_taken_minutes = round(time_taken, 2)
+        attempt.submitted_at = datetime.utcnow()
+        time_taken = (datetime.utcnow() - attempt.started_at).total_seconds() / 60
+        attempt.time_taken_minutes = round(max(0.0, time_taken), 2)
         attempt.is_completed = True
         attempt.is_graded = True
         db.commit()
@@ -370,8 +434,14 @@ async def submit_quiz_attempt(
     for answer_data in submission.answers:
         question = db.query(Question).filter(Question.id == answer_data.question_id).first()
         if question:
+            student_answer_normalized = _normalized_answer_text(answer_data.answer_text)
+
+            # Blank/whitespace answer means unattempted; never negative mark it.
+            if not student_answer_normalized:
+                continue
+
             # Check answer correctness
-            is_correct = answer_data.answer_text.strip().lower() == question.correct_answer.strip().lower()
+            is_correct = student_answer_normalized == _normalized_answer_text(question.correct_answer)
             
             # Apply marking scheme
             if is_correct:
@@ -387,15 +457,16 @@ async def submit_quiz_attempt(
             db_answer = Answer(
                 attempt_id=attempt.id,
                 question_id=question.id,
-                answer_text=answer_data.answer_text,
+                answer_text=answer_data.answer_text.strip(),
                 is_correct=is_correct,
                 marks_awarded=marks_awarded
             )
             db.add(db_answer)
     
     # Calculate time taken
-    submission_time = datetime.now()
+    submission_time = datetime.utcnow()
     time_taken = (submission_time - attempt.started_at).total_seconds() / 60  # in minutes
+    time_taken = max(0.0, time_taken)
     
     # Cap time taken at quiz duration (if quiz has duration)
     # This prevents unrealistic times when students leave quiz open for long periods
@@ -406,7 +477,7 @@ async def submit_quiz_attempt(
     attempt.score = max(0, total_score)  # Don't allow negative total scores
     attempt.percentage = (attempt.score / attempt.total_marks * 100) if attempt.total_marks > 0 else 0
     attempt.submitted_at = submission_time
-    attempt.time_taken_minutes = round(time_taken, 2)
+    attempt.time_taken_minutes = round(max(0.0, time_taken), 2)
     attempt.is_completed = True
     attempt.is_graded = True
     
@@ -415,7 +486,7 @@ async def submit_quiz_attempt(
     
     return attempt
 
-@router.post("/{attempt_id}/save-answer")
+@router.post("/{attempt_id:int}/save-answer")
 async def save_answer_progress(
     attempt_id: int,
     answer_data: dict,
@@ -423,8 +494,9 @@ async def save_answer_progress(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Save a single answer during quiz (for auto-save on refresh)
+    Save or clear a single answer during quiz (for auto-save on refresh)
     Expected answer_data: {"question_id": int, "answer_text": str}
+    - If answer_text is blank, existing saved answer is removed.
     """
     attempt = db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).first()
     
@@ -448,12 +520,14 @@ async def save_answer_progress(
     
     question_id = answer_data.get("question_id")
     answer_text = answer_data.get("answer_text")
-    
-    if not question_id or not answer_text:
+
+    if not question_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="question_id and answer_text are required"
+            detail="question_id is required"
         )
+
+    normalized_answer = (answer_text or "").strip()
     
     # Check if answer already exists, update it
     existing_answer = db.query(Answer).filter(
@@ -461,23 +535,28 @@ async def save_answer_progress(
         Answer.question_id == question_id
     ).first()
     
-    if existing_answer:
-        existing_answer.answer_text = answer_text
+    if existing_answer and not normalized_answer:
+        db.delete(existing_answer)
+    elif existing_answer:
+        existing_answer.answer_text = normalized_answer
     else:
+        if not normalized_answer:
+            # Nothing to persist if no answer exists and payload is blank
+            return {"status": "cleared", "question_id": question_id}
         # Create new answer (without grading yet)
         new_answer = Answer(
             attempt_id=attempt_id,
             question_id=question_id,
-            answer_text=answer_text,
+            answer_text=normalized_answer,
             is_correct=False  # Will be graded on final submission
         )
         db.add(new_answer)
     
     db.commit()
     
-    return {"status": "saved", "question_id": question_id}
+    return {"status": "saved" if normalized_answer else "cleared", "question_id": question_id}
 
-@router.get("/{attempt_id}/answers")
+@router.get("/{attempt_id:int}/answers")
 async def get_saved_answers(
     attempt_id: int,
     db: Session = Depends(get_db),
@@ -514,7 +593,100 @@ async def get_saved_answers(
         ]
     }
 
-@router.get("/{attempt_id}/remaining-time")
+
+@router.api_route("/{attempt_id:int}/kick-out", methods=["POST", "GET"], dependencies=[Depends(require_role(["admin", "teacher"]))])
+@router.api_route("/kick-out/{attempt_id:int}", methods=["POST", "GET"], dependencies=[Depends(require_role(["admin", "teacher"]))])
+@router.api_route("/actions/{attempt_id:int}/kick-out", methods=["POST", "GET"], dependencies=[Depends(require_role(["admin", "teacher"]))])
+async def kick_out_live_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Force-end a student's active live attempt.
+    - Admin can kick from any live quiz.
+    - Teacher can kick only from quizzes they created.
+    """
+    return _kick_out_live_attempt_internal(attempt_id, db, current_user)
+
+
+@router.api_route("/kick-out", methods=["POST", "GET"], dependencies=[Depends(require_role(["admin", "teacher"]))])
+@router.api_route("/actions/kick-out", methods=["POST", "GET"], dependencies=[Depends(require_role(["admin", "teacher"]))])
+async def kick_out_live_attempt_query(
+    attempt_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Compatibility route: force-end live attempt using query parameter."""
+    return _kick_out_live_attempt_internal(attempt_id, db, current_user)
+
+
+@router.get("/kick-out-status", dependencies=[Depends(require_role(["admin", "teacher"]))])
+@router.get("/actions/kick-out-status", dependencies=[Depends(require_role(["admin", "teacher"]))])
+async def kick_out_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Diagnostic endpoint to confirm deployed backend includes kick-out routes."""
+    return {
+        "status": "ok",
+        "feature": "kick_out_live_attempt",
+        "route_version": "2026-03-12-1",
+        "role": current_user.role,
+    }
+
+
+def _kick_out_live_attempt_internal(attempt_id: int, db: Session, current_user: User):
+    attempt = db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attempt not found"
+        )
+
+    quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+    if not quiz:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quiz not found"
+        )
+
+    if current_user.role == "teacher" and quiz.creator_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to manage this attempt"
+        )
+
+    student = db.query(User).filter(User.id == attempt.student_id).first()
+    if not student or student.role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only student attempts can be kicked out"
+        )
+
+    if not quiz.is_live_session:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kick-out is allowed only for live quizzes"
+        )
+
+    if attempt.is_completed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attempt is already completed"
+        )
+
+    now = datetime.utcnow()
+    _finalize_expired_attempt(db, attempt, quiz, now)
+
+    return {
+        "attempt_id": attempt.id,
+        "student_id": attempt.student_id,
+        "quiz_id": attempt.quiz_id,
+        "status": "kicked_out",
+        "message": "Student removed from live quiz and attempt submitted"
+    }
+
+@router.get("/{attempt_id:int}/remaining-time")
 async def get_remaining_time(
     attempt_id: int,
     db: Session = Depends(get_db),
@@ -548,20 +720,26 @@ async def get_remaining_time(
         }
     
     quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
-    now = datetime.now()
+    now = datetime.utcnow()
     is_teacher_or_admin = current_user.role in ["teacher", "admin"]
     
     if quiz.is_live_session and not is_teacher_or_admin:
         # Student live sessions are bound to the session end-time.
-        remaining = (quiz.live_end_time - now).total_seconds()
-        is_expired = now > quiz.live_end_time
+        remaining = _naive_datetime_remaining_seconds(quiz.live_end_time)
+        if quiz.duration_minutes:
+            # Never exceed configured live duration due timezone interpretation drift.
+            remaining = min(remaining, float(quiz.duration_minutes) * 60.0)
+        is_expired = remaining <= 0
     else:
         # Teacher/admin previews use per-attempt duration even for live quizzes.
         # Regular quizzes also use per-attempt duration.
         if quiz.duration_minutes:
+            # started_at is persisted using local datetime.now in this project,
+            # so use local now here to avoid timezone-offset inflation.
+            preview_now = datetime.now()
             deadline = attempt.started_at + timedelta(minutes=quiz.duration_minutes)
-            remaining = (deadline - now).total_seconds()
-            is_expired = now > deadline
+            remaining = (deadline - preview_now).total_seconds()
+            is_expired = preview_now > deadline
         else:
             # No duration limit
             remaining = None
@@ -630,11 +808,7 @@ async def get_my_attempts(
         correct_answers = correct_answer_map.get(attempt.id, 0) if attempt.is_completed else None
         
         # Format time taken - handle None case
-        time_taken_str = None
-        if attempt.time_taken_minutes is not None:
-            minutes = int(attempt.time_taken_minutes)
-            seconds = int((attempt.time_taken_minutes - minutes) * 60)
-            time_taken_str = f"{minutes}m {seconds}s"
+        time_taken_str = _format_minutes_seconds(attempt.time_taken_minutes)
         
         # Create response dict with explicit type conversions
         attempt_dict = {
@@ -646,7 +820,7 @@ async def get_my_attempts(
             "percentage": float(attempt.percentage) if attempt.percentage is not None else None,
             "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
             "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
-            "time_taken_minutes": float(attempt.time_taken_minutes) if attempt.time_taken_minutes is not None else None,
+            "time_taken_minutes": _safe_minutes_value(attempt.time_taken_minutes),
             "is_completed": bool(attempt.is_completed),
             "is_graded": bool(attempt.is_graded),
             "quiz_title": quiz.title if quiz else None,
@@ -670,7 +844,7 @@ async def get_all_attempts(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get all quiz attempts with enhanced details for teachers/admins"""
-    now = datetime.now()
+    now = datetime.utcnow()
     query = db.query(QuizAttempt)
 
     # Student Results/Live Monitor should include only real student attempts.
@@ -718,22 +892,33 @@ async def get_all_attempts(
     ).all()
     question_count_map = {row.quiz_id: int(row.total_questions or 0) for row in question_count_rows}
 
-    answer_stats_rows = db.query(
+    question_rows = db.query(
+        Question.id,
+        Question.quiz_id,
+        Question.correct_answer,
+        Question.marks,
+    ).filter(
+        Question.quiz_id.in_(quiz_ids)
+    ).all()
+    question_meta_map = {
+        int(row.id): {
+            "quiz_id": int(row.quiz_id),
+            "correct_answer": _normalized_answer_text(row.correct_answer),
+            "marks": float(row.marks or 0),
+        }
+        for row in question_rows
+    }
+
+    answer_rows = db.query(
         Answer.attempt_id,
-        func.count(Answer.id).label("answered_count"),
-        func.sum(case((Answer.is_correct == True, 1), else_=0)).label("correct_answers"),
+        Answer.question_id,
+        Answer.answer_text,
     ).filter(
         Answer.attempt_id.in_(attempt_ids)
-    ).group_by(
-        Answer.attempt_id
     ).all()
-    answer_stats_map = {
-        row.attempt_id: {
-            "answered_count": int(row.answered_count or 0),
-            "correct_answers": int(row.correct_answers or 0),
-        }
-        for row in answer_stats_rows
-    }
+    answers_by_attempt = {}
+    for row in answer_rows:
+        answers_by_attempt.setdefault(int(row.attempt_id), {})[int(row.question_id)] = row.answer_text
     
     # Enhance each attempt with calculated fields
     result = []
@@ -755,17 +940,49 @@ async def get_all_attempts(
 
         student = student_map.get(attempt.student_id)
         total_questions = question_count_map.get(attempt.quiz_id, 0)
-        answer_stats = answer_stats_map.get(attempt.id, {"answered_count": 0, "correct_answers": 0})
-        correct_answers = answer_stats["correct_answers"]
-        answered_count = answer_stats["answered_count"]
+        attempt_answer_map = answers_by_attempt.get(int(attempt.id), {})
+        answered_count = 0
+        correct_answers = 0
+        incorrect_answers = 0
+        live_score = 0.0
+
+        for question_id, answer_text in attempt_answer_map.items():
+            normalized_answer = _normalized_answer_text(answer_text)
+            if not normalized_answer:
+                continue
+
+            meta = question_meta_map.get(int(question_id))
+            if not meta:
+                continue
+
+            answered_count += 1
+            if normalized_answer == meta["correct_answer"]:
+                correct_answers += 1
+                live_score += float(meta["marks"])
+            else:
+                incorrect_answers += 1
+                live_score -= float(quiz.negative_marking or 0) if quiz else 0.0
+
+        live_score = max(0.0, float(live_score))
+        quiz_total_marks_value = float(quiz.total_marks) if quiz and quiz.total_marks is not None else float(attempt.total_marks)
+        live_percentage = (live_score / quiz_total_marks_value * 100.0) if quiz_total_marks_value > 0 else 0.0
 
         remaining_seconds = None
+        elapsed_seconds = None
         if not attempt.is_completed and quiz:
             if quiz.is_live_session and quiz.live_end_time:
-                remaining_seconds = max(0, int((quiz.live_end_time - now).total_seconds()))
+                remaining_seconds = max(0, int(_naive_datetime_remaining_seconds(quiz.live_end_time)))
             elif quiz.duration_minutes and attempt.started_at:
                 deadline = attempt.started_at + timedelta(minutes=quiz.duration_minutes)
                 remaining_seconds = max(0, int((deadline - now).total_seconds()))
+
+        if attempt.is_completed and attempt.time_taken_minutes is not None:
+            elapsed_seconds = max(0, int(float(attempt.time_taken_minutes) * 60))
+        elif quiz and attempt.started_at:
+            if remaining_seconds is not None and quiz.duration_minutes:
+                elapsed_seconds = max(0, int(float(quiz.duration_minutes) * 60) - int(remaining_seconds))
+            else:
+                elapsed_seconds = max(0, int(_naive_datetime_elapsed_seconds(attempt.started_at)))
 
         if attempt.is_completed:
             status_value = "completed"
@@ -779,11 +996,7 @@ async def get_all_attempts(
             progress_percentage = round((answered_count / total_questions) * 100, 2)
         
         # Format time taken
-        time_taken_str = None
-        if attempt.time_taken_minutes is not None:
-            minutes = int(attempt.time_taken_minutes)
-            seconds = int((attempt.time_taken_minutes - minutes) * 60)
-            time_taken_str = f"{minutes}m {seconds}s"
+        time_taken_str = _format_minutes_seconds(attempt.time_taken_minutes)
         
         # Create response dict
         sanity_flags = _build_attempt_sanity_flags(
@@ -805,17 +1018,22 @@ async def get_all_attempts(
             "percentage": float(attempt.percentage) if attempt.percentage is not None else None,
             "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
             "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
-            "time_taken_minutes": float(attempt.time_taken_minutes) if attempt.time_taken_minutes is not None else None,
+            "time_taken_minutes": _safe_minutes_value(attempt.time_taken_minutes),
             "is_completed": bool(attempt.is_completed),
             "is_graded": bool(attempt.is_graded),
             "quiz_title": quiz.title if quiz else None,
+            "quiz_duration_minutes": int(quiz.duration_minutes) if quiz and quiz.duration_minutes is not None else None,
             "correct_answers": correct_answers,
+            "incorrect_answers": incorrect_answers,
             "answered_count": answered_count,
             "progress_percentage": progress_percentage,
             "total_questions": total_questions,
-            "quiz_total_marks": float(quiz.total_marks) if quiz else float(attempt.total_marks),
+            "quiz_total_marks": quiz_total_marks_value,
+            "live_score": round(live_score, 2),
+            "live_percentage": round(live_percentage, 2),
             "time_taken": time_taken_str,
             "remaining_seconds": remaining_seconds,
+            "elapsed_seconds": elapsed_seconds,
             "status": status_value,
             "needs_review": len(sanity_flags) > 0,
             "sanity_flags": sanity_flags,
@@ -839,7 +1057,10 @@ async def get_quiz_attempts(
                 detail="Not authorized to view attempts for this quiz"
             )
 
-    attempts = db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz_id).all()
+    attempts = db.query(QuizAttempt)\
+        .join(User, User.id == QuizAttempt.student_id)\
+        .filter(QuizAttempt.quiz_id == quiz_id, User.role == "student")\
+        .all()
     return attempts
 
 @router.get("/stats/dashboard", response_model=DashboardStats, dependencies=[Depends(require_role(["admin"]))])
@@ -899,7 +1120,7 @@ async def get_recent_activity(
         quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
         
         if user and quiz:
-            time_diff = datetime.now() - attempt.started_at
+            time_diff = datetime.utcnow() - attempt.started_at
             if time_diff.seconds < 3600:
                 time_str = f"{time_diff.seconds // 60} mins ago"
             elif time_diff.seconds < 86400:
@@ -917,7 +1138,7 @@ async def get_recent_activity(
     return activities
 
 
-@router.get("/{attempt_id}", response_model=QuizAttemptResponse)
+@router.get("/{attempt_id:int}", response_model=QuizAttemptResponse)
 async def get_attempt(
     attempt_id: int,
     db: Session = Depends(get_db),
@@ -942,17 +1163,44 @@ async def get_attempt(
     # Get quiz and calculate additional fields
     quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
     total_questions = db.query(Question).filter(Question.quiz_id == attempt.quiz_id).count()
-    correct_answers = db.query(Answer).filter(
-        Answer.attempt_id == attempt.id,
-        Answer.is_correct == True
-    ).count()
+    attempt_answers = db.query(Answer).filter(Answer.attempt_id == attempt.id).all()
+    question_rows = db.query(Question.id, Question.correct_answer).filter(Question.quiz_id == attempt.quiz_id).all()
+    correct_answer_map = {row.id: _normalized_answer_text(row.correct_answer) for row in question_rows}
+
+    answered_count = 0
+    correct_answers = 0
+    incorrect_answers = 0
+
+    for answer in attempt_answers:
+        normalized = _normalized_answer_text(answer.answer_text)
+        if not normalized:
+            # Blank answers are treated as unattempted
+            continue
+
+        answered_count += 1
+
+        expected = correct_answer_map.get(answer.question_id)
+        if expected is not None:
+            if normalized == expected:
+                correct_answers += 1
+            else:
+                incorrect_answers += 1
+            continue
+
+        # Fallback for legacy orphaned question rows.
+        if answer.is_correct is True:
+            correct_answers += 1
+        elif answer.is_correct is False or float(answer.marks_awarded or 0) < 0:
+            incorrect_answers += 1
+
+    # Keep breakdown mathematically consistent for any unusual data.
+    if incorrect_answers > answered_count:
+        incorrect_answers = answered_count
+
+    unattempted_questions = max(0, total_questions - answered_count)
 
     # Format time taken
-    time_taken_str = None
-    if attempt.time_taken_minutes:
-        minutes = int(attempt.time_taken_minutes)
-        seconds = int((attempt.time_taken_minutes - minutes) * 60)
-        time_taken_str = f"{minutes}m {seconds}s"
+    time_taken_str = _format_minutes_seconds(attempt.time_taken_minutes)
 
     # Convert to dict and add extra fields
     attempt_dict = {
@@ -964,10 +1212,13 @@ async def get_attempt(
         "percentage": attempt.percentage,
         "started_at": attempt.started_at,
         "submitted_at": attempt.submitted_at,
-        "time_taken_minutes": attempt.time_taken_minutes,
+        "time_taken_minutes": _safe_minutes_value(attempt.time_taken_minutes),
         "is_completed": attempt.is_completed,
         "is_graded": attempt.is_graded,
         "correct_answers": correct_answers,
+        "answered_count": answered_count,
+        "incorrect_answers": incorrect_answers,
+        "unattempted_questions": unattempted_questions,
         "total_questions": total_questions,
         "quiz_total_marks": quiz.total_marks if quiz else attempt.total_marks,
         "time_taken": time_taken_str,
@@ -977,7 +1228,7 @@ async def get_attempt(
     return attempt_dict
 
 
-@router.get("/{attempt_id}/review")
+@router.get("/{attempt_id:int}/review")
 async def get_attempt_review(
     attempt_id: int,
     db: Session = Depends(get_db),
@@ -1023,7 +1274,7 @@ async def get_attempt_review(
     for idx, question in enumerate(questions, start=1):
         answer = answer_map.get(question.id)
         student_answer = answer.answer_text if answer else ""
-        is_correct = bool(answer.is_correct) if answer else False
+        is_correct = answer.is_correct if answer else None
         marks_awarded = float(answer.marks_awarded) if answer and answer.marks_awarded is not None else 0.0
 
         items.append({
@@ -1040,7 +1291,7 @@ async def get_attempt_review(
             "is_correct": is_correct,
             "marks": float(question.marks) if question.marks is not None else 0.0,
             "marks_awarded": marks_awarded,
-            "mistake": not is_correct,
+            "mistake": bool(answer) and (answer.is_correct is False),
         })
 
     return {
@@ -1057,7 +1308,7 @@ async def get_attempt_review(
     }
 
 
-@router.get("/review/{attempt_id}")
+@router.get("/review/{attempt_id:int}")
 async def get_attempt_review_alias(
     attempt_id: int,
     db: Session = Depends(get_db),

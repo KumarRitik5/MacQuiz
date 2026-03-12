@@ -2260,10 +2260,22 @@ const TeacherQuizManagement = () => {
                             const quizDescription = typeof quiz.description === 'string' && quiz.description.trim()
                                 ? quiz.description
                                 : 'No description available';
+                            const isLiveNow = (() => {
+                                if (!quiz?.is_live_session || !quiz?.is_active) return false;
+                                const now = Date.now();
+                                const start = quiz?.live_start_time ? new Date(quiz.live_start_time).getTime() : null;
+                                const end = quiz?.live_end_time ? new Date(quiz.live_end_time).getTime() : null;
+                                const hasStart = Number.isFinite(start);
+                                const hasEnd = Number.isFinite(end);
+                                if (!hasStart && !hasEnd) return true;
+                                if (!hasStart && hasEnd) return end > now;
+                                if (hasStart && !hasEnd) return start <= now;
+                                return start <= now && end > now;
+                            })();
                             return (
                             <div key={quiz.id} className={`border-2 rounded-xl p-6 transition ${
-                                quiz.is_active 
-                                    ? 'border-green-200 bg-green-50/30 hover:border-green-300' 
+                                isLiveNow
+                                    ? 'border-green-200 bg-green-50/30 hover:border-green-300'
                                     : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
                             }`}>
                                 <div className="flex justify-between items-start">
@@ -2271,11 +2283,11 @@ const TeacherQuizManagement = () => {
                                         <div className="flex items-center gap-3">
                                             <h3 className="text-xl font-bold text-gray-900">{quizTitle}</h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                                quiz.is_active 
-                                                    ? 'bg-green-100 text-green-800' 
+                                                isLiveNow
+                                                    ? 'bg-green-100 text-green-800'
                                                     : 'bg-gray-200 text-gray-600'
                                             }`}>
-                                                {quiz.is_active ? '🟢 LIVE' : '⚪ Inactive'}
+                                                {isLiveNow ? '🟢 LIVE NOW' : '⚪ Inactive'}
                                             </span>
                                         </div>
                                         <p className="text-gray-600 mt-1">{quizDescription}</p>
@@ -2304,7 +2316,7 @@ const TeacherQuizManagement = () => {
                                                 onClick={() => handleToggleQuizStatus(quiz.id, quiz.is_active)}
                                                 className="px-3 py-2 rounded-lg font-semibold transition text-sm text-orange-600 hover:bg-orange-50 border border-orange-200"
                                             >
-                                                🔴 Stop
+                                                {isLiveNow ? '🔴 End Live' : '🔴 Deactivate'}
                                             </button>
                                         ) : (
                                             <button 
@@ -3146,58 +3158,110 @@ const SettingsComponent = ({ currentUserRole }) => {
 };
 
 // Student Results View - Shows all quiz attempts with student performance
-const StudentResultsView = () => {
+const StudentResultsView = ({ selfOnly = false }) => {
+    const navigate = useNavigate();
+    const { user } = useAuth();
     const { error, success } = useToast();
     const [attempts, setAttempts] = useState([]);
     const [students, setStudents] = useState([]);
     const [quizzes, setQuizzes] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
     const [filterQuiz, setFilterQuiz] = useState('all');
     const [filterStudent, setFilterStudent] = useState('all');
     const [liveQuizFocus, setLiveQuizFocus] = useState('all');
+    const [liveMinScore, setLiveMinScore] = useState('');
+    const [liveMaxScore, setLiveMaxScore] = useState('');
+    const [kickingAttemptId, setKickingAttemptId] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const fetchAllData = useCallback(async () => {
+    const isQuizLiveNow = useCallback((quiz) => {
+        if (!quiz?.is_live_session || !quiz?.is_active) {
+            return false;
+        }
+
+        const now = Date.now();
+
+        const startTime = quiz?.live_start_time ? new Date(quiz.live_start_time).getTime() : null;
+        const endTime = quiz?.live_end_time ? new Date(quiz.live_end_time).getTime() : null;
+
+        const hasValidStart = Number.isFinite(startTime);
+        const hasValidEnd = Number.isFinite(endTime);
+
+        if (!hasValidStart && !hasValidEnd) {
+            return true;
+        }
+        if (!hasValidStart && hasValidEnd) {
+            return endTime > now;
+        }
+        if (hasValidStart && !hasValidEnd) {
+            return startTime <= now;
+        }
+
+        return startTime <= now && endTime > now;
+    }, []);
+
+    const fetchAttemptsOnly = useCallback(async ({ silent = false } = {}) => {
+        if (silent) {
+            setIsBackgroundRefreshing(true);
+        }
+
+        let attemptsData = [];
+        try {
+            attemptsData = selfOnly
+                ? await attemptAPI.getMyAttempts()
+                : await attemptAPI.getAllAttempts({ completed_only: false });
+        } catch (err) {
+            // Keep existing rows on transient polling failures.
+            if (!silent) {
+                if (err?.status === 403 || err?.status === 404) {
+                    attemptsData = [];
+                } else {
+                    attemptsData = [];
+                }
+            } else {
+                attemptsData = null;
+            }
+        } finally {
+            if (silent) {
+                setIsBackgroundRefreshing(false);
+            }
+        }
+
+        if (attemptsData !== null) {
+            const normalizedAttempts = Array.isArray(attemptsData)
+                ? attemptsData.filter((item) => item && typeof item === 'object' && Number.isFinite(Number(item.id)))
+                : [];
+            setAttempts(normalizedAttempts);
+        }
+    }, [selfOnly]);
+
+    const fetchStaticData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Fetch each resource individually to identify which one fails
-            let usersData, quizzesData, attemptsData;
-            
+            let usersData;
+            let quizzesData;
+
             try {
-                usersData = await userAPI.getAllUsers();
+                if (selfOnly) {
+                    usersData = user ? [user] : [];
+                } else {
+                    usersData = await userAPI.getAllUsers();
+                }
             } catch (err) {
                 throw new Error(`Users API failed: ${err.message}`);
             }
-            
+
             try {
                 quizzesData = await quizAPI.getAllQuizzes();
             } catch (err) {
                 throw new Error(`Quizzes API failed: ${err.message}`);
             }
-            
-            try {
-                attemptsData = await attemptAPI.getAllAttempts({ completed_only: false });
-            } catch (err) {
-                // For APIError objects from fetchAPI
-                if (err?.status) {
-                    if (err.status === 403) {
-                        attemptsData = [];
-                    } else if (err.status === 404) {
-                        attemptsData = [];
-                    } else {
-                        attemptsData = [];
-                    }
-                } else {
-                    // Network or other error
-                    attemptsData = [];
-                }
-                // Don't throw - just show empty results
-            }
 
             const studentsList = usersData.filter(u => u.role === 'student');
             setStudents(studentsList);
             setQuizzes(quizzesData || []);
-            setAttempts(attemptsData || []);
+            await fetchAttemptsOnly({ silent: false });
         } catch (err) {
             // Better error message formatting
             let errorMessage = 'Failed to load student results';
@@ -3214,34 +3278,49 @@ const StudentResultsView = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [error]);
+    }, [error, fetchAttemptsOnly, selfOnly, user]);
 
     useEffect(() => {
-        fetchAllData();
-    }, [refreshKey, fetchAllData]);
+        fetchStaticData();
+    }, [refreshKey, fetchStaticData]);
 
     useEffect(() => {
+        const hasLiveQuizRunning = quizzes.some((quiz) => isQuizLiveNow(quiz));
+        const hasInProgressAttempts = attempts.some((attempt) => attempt?.status === 'in_progress');
+        const shouldAutoRefresh = hasLiveQuizRunning || hasInProgressAttempts;
+
+        if (!shouldAutoRefresh) {
+            setIsBackgroundRefreshing(false);
+            return undefined;
+        }
+
         const liveRefresh = setInterval(() => {
-            setRefreshKey(prev => prev + 1);
+            // Live monitor refreshes attempts data only without blocking the whole page.
+            fetchAttemptsOnly({ silent: true });
         }, 10000);
 
         return () => clearInterval(liveRefresh);
-    }, []);
+    }, [fetchAttemptsOnly, quizzes, attempts, isQuizLiveNow]);
 
     useEffect(() => {
-        const onFocus = () => setRefreshKey(prev => prev + 1);
+        const onFocus = () => fetchAttemptsOnly({ silent: true });
         window.addEventListener('focus', onFocus);
         return () => window.removeEventListener('focus', onFocus);
-    }, []);
+    }, [fetchAttemptsOnly]);
 
     // Filter attempts
     const filteredAttempts = attempts.filter(attempt => {
         if (filterQuiz !== 'all' && attempt.quiz_id !== parseInt(filterQuiz)) return false;
-        if (filterStudent !== 'all' && attempt.student_id !== parseInt(filterStudent)) return false;
+        if (!selfOnly && filterStudent !== 'all' && attempt.student_id !== parseInt(filterStudent)) return false;
+        if (selfOnly && user?.id && attempt.student_id !== user.id) return false;
         return true;
     });
 
-    const liveAttempts = filteredAttempts.filter(attempt => attempt.status === 'in_progress');
+    const activeLiveQuizzes = quizzes.filter((quiz) => isQuizLiveNow(quiz));
+    const activeLiveQuizIds = new Set(activeLiveQuizzes.map((quiz) => quiz.id));
+    const liveAttempts = filteredAttempts.filter(
+        (attempt) => attempt.status === 'in_progress' && activeLiveQuizIds.has(attempt.quiz_id)
+    );
     const expiredAttempts = filteredAttempts.filter(attempt => attempt.status === 'expired');
     const completedAttempts = filteredAttempts.filter(attempt => attempt.is_completed);
     const latestCompletedAttempts = useMemo(() => {
@@ -3263,14 +3342,54 @@ const StudentResultsView = () => {
         }
         return Array.from(byStudentQuiz.values());
     }, [completedAttempts]);
-    const activeLiveQuizzes = quizzes.filter((quiz) => quiz?.is_live_session && quiz?.is_active);
+    const liveMonitorAutoRefreshEnabled = activeLiveQuizzes.length > 0 || liveAttempts.length > 0;
+    const minLiveScore = liveMinScore === '' ? null : Number(liveMinScore);
+    const maxLiveScore = liveMaxScore === '' ? null : Number(liveMaxScore);
     const focusedLiveAttempts = liveAttempts.filter((attempt) => {
-        if (liveQuizFocus === 'all') return true;
-        return attempt.quiz_id === parseInt(liveQuizFocus);
+        if (liveQuizFocus !== 'all' && attempt.quiz_id !== parseInt(liveQuizFocus)) {
+            return false;
+        }
+
+        // Filter by real-time live score percentage from backend.
+        const liveScoreMetric = Number(
+            attempt?.live_percentage ?? attempt?.percentage ?? attempt?.progress_percentage ?? 0
+        );
+
+        if (Number.isFinite(minLiveScore) && liveScoreMetric < minLiveScore) {
+            return false;
+        }
+        if (Number.isFinite(maxLiveScore) && liveScoreMetric > maxLiveScore) {
+            return false;
+        }
+
+        return true;
+    }).sort((a, b) => {
+        const scoreA = Number(a?.live_percentage ?? a?.percentage ?? a?.progress_percentage ?? 0);
+        const scoreB = Number(b?.live_percentage ?? b?.percentage ?? b?.progress_percentage ?? 0);
+        if (scoreA !== scoreB) {
+            return scoreB - scoreA;
+        }
+        return Number(b?.answered_count ?? 0) - Number(a?.answered_count ?? 0);
     });
     const reviewFlagCount = latestCompletedAttempts.filter(
         (attempt) => attempt?.needs_review || (Array.isArray(attempt?.sanity_flags) && attempt.sanity_flags.length > 0)
     ).length;
+
+    const toSafeNumber = (value, fallback = 0) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const quizDurationById = useMemo(() => {
+        const map = new Map();
+        for (const quiz of quizzes) {
+            const durationMinutes = Number(quiz?.duration_minutes);
+            if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+                map.set(Number(quiz.id), durationMinutes);
+            }
+        }
+        return map;
+    }, [quizzes]);
 
     const formatRemaining = (seconds) => {
         if (seconds === null || seconds === undefined) return '—';
@@ -3280,11 +3399,40 @@ const StudentResultsView = () => {
         return `${mins}m ${secs}s`;
     };
 
-    const formatElapsed = (startedAt) => {
+    const formatElapsed = (attempt) => {
+        const elapsedSeconds = Number(attempt?.elapsed_seconds);
+        if (Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
+            let seconds = Math.max(0, Math.floor(elapsedSeconds));
+            if (seconds === 0 && attempt?.status === 'in_progress' && Number(attempt?.answered_count || 0) > 0) {
+                seconds = 1;
+            }
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}m ${secs}s`;
+        }
+
+        const durationMinutes = Number(
+            attempt?.quiz_duration_minutes ?? quizDurationById.get(Number(attempt?.quiz_id))
+        );
+        const remainingSeconds = Number(attempt?.remaining_seconds);
+        if (Number.isFinite(durationMinutes) && durationMinutes > 0 && Number.isFinite(remainingSeconds) && remainingSeconds >= 0) {
+            let derived = Math.max(0, Math.floor(durationMinutes * 60) - Math.floor(remainingSeconds));
+            if (derived === 0 && attempt?.status === 'in_progress' && Number(attempt?.answered_count || 0) > 0) {
+                derived = 1;
+            }
+            const mins = Math.floor(derived / 60);
+            const secs = derived % 60;
+            return `${mins}m ${secs}s`;
+        }
+
+        const startedAt = attempt?.started_at;
         if (!startedAt) return '—';
         const started = new Date(startedAt);
         const now = new Date();
-        const seconds = Math.max(0, Math.floor((now - started) / 1000));
+        let seconds = Math.max(0, Math.floor((now - started) / 1000));
+        if (seconds === 0 && attempt?.status === 'in_progress' && Number(attempt?.answered_count || 0) > 0) {
+            seconds = 1;
+        }
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins}m ${secs}s`;
@@ -3296,6 +3444,35 @@ const StudentResultsView = () => {
         return student ? `${student.first_name} ${student.last_name}` : 'Unknown';
     };
 
+    const handleKickOut = async (attempt) => {
+        if (!attempt?.id) return;
+
+        const studentName = attempt.student_name || getStudentName(attempt.student_id);
+        const confirmed = window.confirm(`Kick ${studentName} out of this live quiz? Their current attempt will be submitted.`);
+        if (!confirmed) {
+            return;
+        }
+
+        setKickingAttemptId(attempt.id);
+        try {
+            await attemptAPI.kickOutAttempt(attempt.id);
+            success(`${studentName} was removed from the live quiz.`);
+            // Optimistic local update avoids a fragile immediate refetch path on some deployments.
+            setAttempts((prev) => Array.isArray(prev) ? prev.filter((row) => Number(row?.id) !== Number(attempt.id)) : []);
+        } catch (err) {
+            const status = Number(err?.status);
+            if (status === 404 || status === 405 || status === 422) {
+                const backendUrl = err?.data?.backend_url;
+                const suffix = backendUrl ? ` Backend URL: ${backendUrl}` : '';
+                error(`Kick-out endpoint is not available on backend deployment yet. Please redeploy backend, then try again.${suffix}`);
+            } else {
+                error(err?.data?.detail || err?.message || 'Failed to kick out student');
+            }
+        } finally {
+            setKickingAttemptId(null);
+        }
+    };
+
     // Export to CSV
     const exportToCSV = () => {
         if (latestCompletedAttempts.length === 0) {
@@ -3305,13 +3482,14 @@ const StudentResultsView = () => {
 
         const headers = ['Student Name', 'Email', 'Quiz', 'Score', 'Total Marks', 'Percentage', 'Grade', 'Correct Answers', 'Total Questions', 'Time Taken', 'Submitted At', 'Status'];
         const csvData = latestCompletedAttempts.map((attempt) => {
-            const percentage = attempt.percentage || 0;
+            const percentage = toSafeNumber(attempt?.percentage, 0);
+            const score = toSafeNumber(attempt?.score, 0);
             const grade = getGradeFromPercentage(percentage);
             return [
                 attempt.student_name || getStudentName(attempt.student_id),
                 attempt.student_email || '',
                 attempt.quiz_title || `Quiz ${attempt.quiz_id}`,
-                attempt.score?.toFixed(1) || 0,
+                score.toFixed(1),
                 attempt.quiz_total_marks || attempt.total_marks,
                 percentage.toFixed(1) + '%',
                 grade,
@@ -3338,8 +3516,8 @@ const StudentResultsView = () => {
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
             <div className="mb-6 flex justify-between items-start">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Student Quiz Results</h2>
-                    <p className="text-gray-600">View all student quiz attempts and performance</p>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{selfOnly ? 'My Quiz Results' : 'Student Quiz Results'}</h2>
+                    <p className="text-gray-600">{selfOnly ? 'View your quiz attempts and performance' : 'View all student quiz attempts and performance'}</p>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -3377,28 +3555,35 @@ const StudentResultsView = () => {
                     </select>
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Student</label>
-                    <select
-                        value={filterStudent}
-                        onChange={(e) => setFilterStudent(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        <option value="all">All Students</option>
-                        {students.map(student => (
-                            <option key={student.id} value={student.id}>
-                                {student.first_name} {student.last_name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+                {!selfOnly && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Student</label>
+                        <select
+                            value={filterStudent}
+                            onChange={(e) => setFilterStudent(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="all">All Students</option>
+                            {students.map(student => (
+                                <option key={student.id} value={student.id}>
+                                    {student.first_name} {student.last_name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             {/* Live Session Monitor */}
+            {!selfOnly && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-bold text-red-900">Live Session Monitor</h3>
-                    <span className="text-xs text-red-700 bg-red-100 px-2 py-1 rounded-full">Auto-refresh: 10s</span>
+                    <span className="text-xs text-red-700 bg-red-100 px-2 py-1 rounded-full">
+                        {liveMonitorAutoRefreshEnabled
+                            ? `Auto-refresh: 10s${isBackgroundRefreshing ? ' (syncing...)' : ''}`
+                            : 'Auto-refresh paused (no active live session)'}
+                    </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
@@ -3440,6 +3625,33 @@ const StudentResultsView = () => {
                     </select>
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 max-w-xl">
+                    <div>
+                        <label className="block text-xs font-medium text-red-800 mb-1">Min Live Score %</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={liveMinScore}
+                            onChange={(e) => setLiveMinScore(e.target.value)}
+                            placeholder="e.g. 40"
+                            className="w-full px-3 py-2 border border-red-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-red-300 focus:border-red-300"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-red-800 mb-1">Max Live Score %</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={liveMaxScore}
+                            onChange={(e) => setLiveMaxScore(e.target.value)}
+                            placeholder="e.g. 90"
+                            className="w-full px-3 py-2 border border-red-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-red-300 focus:border-red-300"
+                        />
+                    </div>
+                </div>
+
                 {focusedLiveAttempts.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -3448,9 +3660,11 @@ const StudentResultsView = () => {
                                     <th className="px-3 py-2">Student</th>
                                     <th className="px-3 py-2">Quiz</th>
                                     <th className="px-3 py-2">Progress</th>
+                                    <th className="px-3 py-2">Live Score %</th>
                                     <th className="px-3 py-2">Elapsed</th>
                                     <th className="px-3 py-2">Remaining</th>
                                     <th className="px-3 py-2">Status</th>
+                                    <th className="px-3 py-2">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -3460,9 +3674,15 @@ const StudentResultsView = () => {
                                         <td className="px-3 py-2 text-gray-700">{attempt.quiz_title || `Quiz ${attempt.quiz_id}`}</td>
                                         <td className="px-3 py-2 text-gray-700">
                                             {attempt.answered_count || 0}/{attempt.total_questions || 0}
-                                            <span className="ml-2 text-xs text-gray-500">({(attempt.progress_percentage || 0).toFixed(1)}%)</span>
+                                            <span className="ml-2 text-xs text-gray-500">({toSafeNumber(attempt?.progress_percentage, 0).toFixed(1)}%)</span>
                                         </td>
-                                        <td className="px-3 py-2 text-gray-700">{formatElapsed(attempt.started_at)}</td>
+                                        <td className="px-3 py-2 font-semibold text-gray-800">
+                                            {Number(attempt?.live_percentage ?? attempt?.percentage ?? attempt?.progress_percentage ?? 0).toFixed(1)}
+                                            <span className="ml-2 text-xs text-gray-500">
+                                                ({Number(attempt?.live_score ?? attempt?.score ?? 0).toFixed(2)} / {Number(attempt?.quiz_total_marks ?? attempt?.total_marks ?? 0).toFixed(0)})
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-700">{formatElapsed(attempt)}</td>
                                         <td className="px-3 py-2 font-semibold text-red-700">{formatRemaining(attempt.remaining_seconds)}</td>
                                         <td className="px-3 py-2">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${
@@ -3473,6 +3693,15 @@ const StudentResultsView = () => {
                                                 {attempt.status === 'expired' ? 'Expired' : 'In Progress'}
                                             </span>
                                         </td>
+                                        <td className="px-3 py-2">
+                                            <button
+                                                onClick={() => handleKickOut(attempt)}
+                                                disabled={kickingAttemptId === attempt.id}
+                                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {kickingAttemptId === attempt.id ? 'Kicking...' : 'Kick Out'}
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -3482,6 +3711,7 @@ const StudentResultsView = () => {
                     <p className="text-sm text-red-800">No students are currently in an active quiz session for the selected quiz.</p>
                 )}
             </div>
+            )}
 
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -3493,7 +3723,7 @@ const StudentResultsView = () => {
                     <div className="text-sm text-gray-600">Average Score</div>
                     <div className="text-2xl font-bold text-green-600">
                         {latestCompletedAttempts.length > 0
-                            ? (latestCompletedAttempts.reduce((sum, a) => sum + (a.percentage || 0), 0) / latestCompletedAttempts.length).toFixed(1)
+                            ? (latestCompletedAttempts.reduce((sum, a) => sum + toSafeNumber(a?.percentage, 0), 0) / latestCompletedAttempts.length).toFixed(1)
                             : '0'}%
                     </div>
                 </div>
@@ -3502,21 +3732,23 @@ const StudentResultsView = () => {
                     <div className="text-2xl font-bold text-yellow-600">
                         {latestCompletedAttempts.length > 0
                             ? ((latestCompletedAttempts.filter(a => {
-                                const grade = getGradeFromPercentage(a.percentage || 0);
+                                const grade = getGradeFromPercentage(toSafeNumber(a?.percentage, 0));
                                 return grade !== 'F' && grade !== 'N/A';
                             }).length / latestCompletedAttempts.length) * 100).toFixed(1)
                             : '0'}%
                     </div>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg">
-                    <div className="text-sm text-gray-600">Completed Unique Students</div>
+                    <div className="text-sm text-gray-600">{selfOnly ? 'Completed Attempts' : 'Completed Unique Students'}</div>
                     <div className="text-2xl font-bold text-purple-600">
-                        {new Set(latestCompletedAttempts.map(a => a.student_id)).size}
+                        {selfOnly
+                            ? latestCompletedAttempts.length
+                            : new Set(latestCompletedAttempts.map(a => a.student_id)).size}
                     </div>
                 </div>
             </div>
 
-            {reviewFlagCount > 0 && (
+            {!selfOnly && reviewFlagCount > 0 && (
                 <div className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     {reviewFlagCount} completed attempt(s) flagged for review due to scoring/time sanity checks.
                 </div>
@@ -3542,11 +3774,14 @@ const StudentResultsView = () => {
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Time Taken</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Submitted</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                                     {latestCompletedAttempts.map((attempt) => {
-                                const percentage = attempt.percentage || 0;
+                                const percentage = toSafeNumber(attempt?.percentage, 0);
+                                const score = toSafeNumber(attempt?.score, 0);
+                                const totalMarks = toSafeNumber(attempt?.quiz_total_marks ?? attempt?.total_marks, 0);
                                 const grade = getGradeFromPercentage(percentage);
                                 const passed = grade !== 'F' && grade !== 'N/A';
                                 
@@ -3562,7 +3797,7 @@ const StudentResultsView = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className="font-bold text-gray-900">
-                                                {attempt.score?.toFixed(1) || 0} / {attempt.quiz_total_marks || attempt.total_marks}
+                                                {score.toFixed(1)} / {totalMarks}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -3605,6 +3840,14 @@ const StudentResultsView = () => {
                                                     </span>
                                                 )}
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <button
+                                                onClick={() => navigate(`/quiz-result/${attempt.id}`)}
+                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-semibold"
+                                            >
+                                                View Result
+                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -3821,8 +4064,31 @@ export default function AdminDashboard() {
             }
 
             if (user?.role === 'teacher' && user?.id) {
-                const data = await analyticsAPI.getTeacherStats(user.id);
-                setStatsData({ kind: 'teacher', data });
+                const [data, completedAttempts] = await Promise.all([
+                    analyticsAPI.getTeacherStats(user.id),
+                    attemptAPI.getAllAttempts({ completed_only: true, limit: 300, skip: 0 }),
+                ]);
+
+                const uniqueStudents = new Set(
+                    (completedAttempts || [])
+                        .map((attempt) => attempt?.student_id)
+                        .filter((studentId) => studentId !== null && studentId !== undefined)
+                ).size;
+
+                const percentages = (completedAttempts || [])
+                    .map((attempt) => Number(attempt?.percentage))
+                    .filter((value) => Number.isFinite(value));
+
+                const computedAvg = percentages.length
+                    ? Number((percentages.reduce((sum, value) => sum + value, 0) / percentages.length).toFixed(2))
+                    : null;
+
+                const mergedTeacherStats = {
+                    ...data,
+                    students_attempted: uniqueStudents,
+                    average_quiz_score: computedAvg,
+                };
+                setStatsData({ kind: 'teacher', data: mergedTeacherStats });
                 return;
             }
 
@@ -4203,7 +4469,14 @@ export default function AdminDashboard() {
                     ? <StudentUnifiedView activeTab="Profile" user={user} />
                     : <Placeholder content="Page Not Found" />;
             case 'Student Results':
-                return <StudentResultsView />;
+                if (user?.role === 'student') {
+                    return <Placeholder content="Page Not Found" />;
+                }
+                return (
+                    <TabErrorBoundary>
+                        <StudentResultsView />
+                    </TabErrorBoundary>
+                );
             case 'Detailed Reports':
                 return <DetailedReportsTool />;
             case 'SDC Team':

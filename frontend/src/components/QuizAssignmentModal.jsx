@@ -15,19 +15,34 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
 
     const toLocalDateTimeInput = (value) => {
         if (!value) return '';
-        let normalized = String(value).trim();
-        const hasExplicitTz = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
-        if (!hasExplicitTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?$/.test(normalized)) {
-            normalized = `${normalized}Z`;
+        const raw = String(value).trim().replace(' ', 'T');
+
+        // If server already returned a naive datetime, keep it as local wall-clock time.
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?$/.test(raw) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
+            return raw.slice(0, 16);
         }
 
-        const date = new Date(normalized);
+        // If timezone is explicit, convert to local input representation.
+        const date = new Date(raw);
         if (Number.isNaN(date.getTime())) return '';
-        return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mi = String(date.getMinutes()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
     };
 
     const getLocalNowForDateTimeInput = () => {
         const now = new Date();
+        return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+
+    const getDefaultLiveStartForModal = () => {
+        const now = new Date();
+        // Default to next minute to avoid edge-of-minute validation/race issues.
+        now.setSeconds(0, 0);
+        now.setMinutes(now.getMinutes() + 1);
         return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     };
 
@@ -81,14 +96,14 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                 // Convert backend datetime to local datetime-local input format.
                 setLiveStartTime(toLocalDateTimeInput(quiz.live_start_time));
             } else {
-                // No live session in backend, start fresh
-                setIsLiveSession(false);
-                setLiveStartTime('');
+                // Default Go Live flow to live-session mode for synchronized starts.
+                setIsLiveSession(true);
+                setLiveStartTime(getDefaultLiveStartForModal());
             }
         } catch (err) {
             console.error('Failed to load live session settings:', err);
-            setIsLiveSession(false);
-            setLiveStartTime('');
+            setIsLiveSession(true);
+            setLiveStartTime(getDefaultLiveStartForModal());
         }
     }, [quiz]);
 
@@ -180,10 +195,9 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
             };
 
             if (isLiveSession && liveStartTime) {
-                // Send explicit UTC time to avoid server/browser timezone drift.
-                const selectedLocalDate = new Date(liveStartTime);
-                updatePayload.live_start_time = selectedLocalDate.toISOString().replace(/\.\d{3}Z$/, 'Z');
-                console.log('🕐 Sending UTC time:', updatePayload.live_start_time);
+                // Send local naive datetime string so backend stores the same wall-clock time.
+                updatePayload.live_start_time = `${liveStartTime}:00`;
+                console.log('🕐 Sending local live_start_time:', updatePayload.live_start_time);
             }
 
             console.log('Saving assignment with payload:', updatePayload);
@@ -198,7 +212,8 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to activate quiz');
+                const errorPayload = await response.json().catch(() => ({}));
+                throw new Error(errorPayload?.detail || 'Failed to activate quiz');
             }
 
             console.log(`✅ Quiz assigned to ${selectedStudents.length} students`);
@@ -288,6 +303,12 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {!isLiveSession && (
+                            <p className="text-xs text-amber-800 bg-amber-100 border border-amber-200 rounded px-3 py-2">
+                                Live session is OFF. Quiz will be immediately available after assignment.
+                            </p>
                         )}
                     </div>
 

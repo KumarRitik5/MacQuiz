@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 import math
 from app.db.database import get_db
-from app.models.models import User, Quiz, Question, QuestionBank, Subject
+from app.models.models import User, Quiz, Question, QuestionBank, Subject, QuizAttempt
 from app.schemas.schemas import (
     QuizCreate, QuizResponse, QuizDetailResponse, QuizUpdate, QuizWithAnswers
 )
@@ -15,6 +15,11 @@ router = APIRouter()
 
 # Allow a small clock-skew tolerance so students are not blocked at countdown zero.
 START_TIME_TOLERANCE_SECONDS = 90
+# Live sessions should start strictly at configured time.
+LIVE_START_TIME_TOLERANCE_SECONDS = 0
+# When teacher activates a live quiz, allow slight second-level drift so
+# selecting the current minute doesn't fail because backend compares with seconds.
+LIVE_ACTIVATION_PAST_TOLERANCE_SECONDS = 59
 
 @router.post("/", response_model=QuizResponse, dependencies=[Depends(require_role(["admin", "teacher"]))])
 async def create_quiz(
@@ -38,6 +43,12 @@ async def create_quiz(
             # Don't fail, just set subject_id to None
             print(f"Warning: Subject {quiz_data.subject_id} not found, creating quiz without subject")
             quiz_data.subject_id = None
+
+    # Normalize incoming datetimes to UTC-naive so comparisons are consistent.
+    for dt_field in ["scheduled_at", "live_start_time", "live_end_time"]:
+        dt_value = getattr(quiz_data, dt_field, None)
+        if isinstance(dt_value, datetime) and dt_value.tzinfo is not None:
+            setattr(quiz_data, dt_field, dt_value.astimezone(timezone.utc).replace(tzinfo=None))
     
     # Calculate total marks
     total_marks = sum(q.marks for q in quiz_data.questions)
@@ -118,7 +129,6 @@ async def create_quiz(
         )
     
     # Return formatted quiz response with attempts count
-    from app.models.models import QuizAttempt
     quiz_dict = {
         "id": db_quiz.id,
         "title": db_quiz.title,
@@ -140,7 +150,10 @@ async def create_quiz(
         "created_at": db_quiz.created_at,
         "updated_at": db_quiz.updated_at,
         "total_questions": len(db_quiz.questions) if db_quiz.questions else 0,
-        "attempts": db.query(QuizAttempt).filter(QuizAttempt.quiz_id == db_quiz.id).count()
+        "attempts": db.query(QuizAttempt)
+            .join(User, User.id == QuizAttempt.student_id)
+            .filter(QuizAttempt.quiz_id == db_quiz.id, User.role == "student")
+            .count()
     }
     
     return quiz_dict
@@ -195,8 +208,6 @@ async def get_all_quizzes(
     # Add total_questions and attempts count to each quiz
     result = []
     for quiz in quizzes:
-        from app.models.models import QuizAttempt
-        
         quiz_dict = {
             "id": quiz.id,
             "title": quiz.title,
@@ -218,7 +229,10 @@ async def get_all_quizzes(
             "created_at": quiz.created_at,
             "updated_at": quiz.updated_at,
             "total_questions": db.query(Question).filter(Question.quiz_id == quiz.id).count(),
-            "attempts": db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).count()
+            "attempts": db.query(QuizAttempt)
+                .join(User, User.id == QuizAttempt.student_id)
+                .filter(QuizAttempt.quiz_id == quiz.id, User.role == "student")
+                .count()
         }
         result.append(quiz_dict)
     
@@ -268,53 +282,8 @@ async def get_quiz(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Quiz not available"
             )
-        
-        # For live sessions, enforce strict timing
-        if quiz.is_live_session and quiz.live_start_time:
-            now = datetime.now()
-            from app.models.models import QuizAttempt
-            active_attempt = db.query(QuizAttempt).filter(
-                QuizAttempt.quiz_id == quiz.id,
-                QuizAttempt.student_id == current_user.id,
-                QuizAttempt.is_completed == False
-            ).first()
-            
-            # Cannot access before start time
-            if now < quiz.live_start_time:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Quiz not started yet. Starts at {quiz.live_start_time}"
-                )
-            
-            # 5-minute grace period after start
-            grace_end = quiz.live_start_time + timedelta(minutes=5)
-            if now > grace_end and not active_attempt:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Quiz grace period expired. Cannot join after 5 minutes of start time."
-                )
-            
-            # Check if session has ended
-            if quiz.live_end_time and now > quiz.live_end_time:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Quiz session has ended."
-                )
-        
-        # For scheduled (non-live) quizzes
-        elif quiz.scheduled_at:
-            now = datetime.now()
-            grace_end = quiz.scheduled_at + timedelta(minutes=quiz.grace_period_minutes)
-            if now < quiz.scheduled_at:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Quiz not started yet. Starts at {quiz.scheduled_at}"
-                )
-            if now > grace_end:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Quiz grace period expired. Cannot start now."
-                )
+        # Timing windows are enforced by eligibility/start-attempt endpoints.
+        # Keep quiz detail fetch lightweight so students can reach pre-start view.
     
     # Return quiz with answers included for teachers/admins
     if current_user.role in ["admin", "teacher"]:
@@ -455,6 +424,8 @@ async def check_quiz_eligibility(
         QuizAttempt.is_completed == False
     ).first()
     
+    # Quiz schedule datetimes are persisted as naive values; use local server time
+    # to avoid allowing early joins from UTC/local interpretation mismatch.
     now = datetime.now()
     calculated_duration = quiz.duration_minutes
     
@@ -468,7 +439,7 @@ async def check_quiz_eligibility(
             }
 
         # Cannot join before start time (with tolerance for minor clock drift).
-        live_join_open_time = quiz.live_start_time - timedelta(seconds=START_TIME_TOLERANCE_SECONDS)
+        live_join_open_time = quiz.live_start_time - timedelta(seconds=LIVE_START_TIME_TOLERANCE_SECONDS)
         if now < live_join_open_time:
             seconds_until_start = max(0, math.ceil((quiz.live_start_time - now).total_seconds()))
             return {
@@ -478,14 +449,7 @@ async def check_quiz_eligibility(
                 "seconds_until_start": seconds_until_start,
             }
         
-        # 5-minute grace period after start
-        grace_end = quiz.live_start_time + timedelta(minutes=5)
-        # New joins are blocked after grace; reconnections with active_attempt are allowed
-        if now > grace_end and not active_attempt:
-            return {
-                "eligible": False,
-                "reason": "Quiz grace period expired. Cannot join after 5 minutes of start time."
-            }
+        # Students can join any time while the live session is active.
         
         # Calculate remaining time based on active attempt OR when student would join
         if active_attempt:
@@ -589,6 +553,30 @@ async def update_quiz(
             duration = update_data.get('duration_minutes', quiz.duration_minutes)
             if duration:
                 update_data['live_end_time'] = update_data['live_start_time'] + timedelta(minutes=duration)
+
+    # If a live quiz is being activated, preserve teacher-selected start time.
+    # Never silently shift start time to "now" because it causes unexpected early joins.
+    activating_live_quiz = (
+        update_data.get('is_active') is True
+        and (update_data.get('is_live_session') is True or quiz.is_live_session)
+    )
+    if activating_live_quiz:
+        now = datetime.now()
+        candidate_start = update_data.get('live_start_time', quiz.live_start_time)
+        duration = update_data.get('duration_minutes', quiz.duration_minutes) or 30
+
+        if not candidate_start:
+            candidate_start = now
+            update_data['live_start_time'] = candidate_start
+
+        # Reject past starts instead of silently mutating to now.
+        if candidate_start < (now - timedelta(seconds=LIVE_ACTIVATION_PAST_TOLERANCE_SECONDS)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Live start time is too far in the past. Please choose current time or a future start time."
+            )
+
+        update_data['live_end_time'] = candidate_start + timedelta(minutes=duration)
     
     for field, value in update_data.items():
         setattr(quiz, field, value)

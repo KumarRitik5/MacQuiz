@@ -6,14 +6,39 @@ const ToastContext = createContext(null);
 export const ToastProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);
 
+    const normalizeMessage = useCallback((message) => {
+        if (typeof message === 'string') {
+            return message;
+        }
+        if (message === null || message === undefined) {
+            return 'Unexpected error';
+        }
+        if (message instanceof Error) {
+            return message.message || 'Unexpected error';
+        }
+        if (typeof message === 'object') {
+            try {
+                const detail = message.detail || message.message || message.error;
+                if (typeof detail === 'string') {
+                    return detail;
+                }
+                return JSON.stringify(message);
+            } catch {
+                return 'Unexpected error';
+            }
+        }
+        return String(message);
+    }, []);
+
     const showToast = useCallback((message, type = 'info') => {
+        const safeMessage = normalizeMessage(message);
         const id = Date.now();
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => [...prev, { id, message: safeMessage, type }]);
         
         setTimeout(() => {
             setToasts(prev => prev.filter(toast => toast.id !== id));
         }, 3000);
-    }, []);
+    }, [normalizeMessage]);
 
     const success = useCallback((message) => showToast(message, 'success'), [showToast]);
     const error = useCallback((message) => showToast(message, 'error'), [showToast]);

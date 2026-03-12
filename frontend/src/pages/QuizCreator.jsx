@@ -21,7 +21,7 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
         class_year: '1st Year',
         duration_minutes: 30,
         marks_per_correct: 1,
-        negative_marking: 0,
+        negative_marking: 0.25,
         is_active: false,
         questions: []
     });
@@ -51,9 +51,9 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 description: quiz.description || '',
                 department: quiz.department || '',
                 class_year: quiz.class_year || '1st Year',
-                duration_minutes: quiz.duration_minutes || 30,
-                marks_per_correct: quiz.marks_per_correct || 1,
-                negative_marking: quiz.negative_marking || 0,
+                duration_minutes: quiz.duration_minutes ?? 30,
+                marks_per_correct: quiz.marks_per_correct ?? 1,
+                negative_marking: quiz.negative_marking ?? 0.25,
                 is_active: quiz.is_active || false,
                 questions: quiz.questions || []
             });
@@ -207,12 +207,16 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                 marks: q.marks
             }));
 
+            const parsedDuration = Number.parseInt(quizData.duration_minutes, 10);
+            const parsedMarksPerCorrect = Number.parseFloat(quizData.marks_per_correct);
+            const parsedNegativeMarking = Number.parseFloat(quizData.negative_marking);
+
             const payload = {
                 title: quizData.title,
                 description: quizData.description || null,
-                duration_minutes: parseInt(quizData.duration_minutes) || 30,
-                marks_per_correct: parseFloat(quizData.marks_per_correct) || 1,
-                negative_marking: parseFloat(quizData.negative_marking) || 0,
+                duration_minutes: Number.isFinite(parsedDuration) ? parsedDuration : 30,
+                marks_per_correct: Number.isFinite(parsedMarksPerCorrect) ? parsedMarksPerCorrect : 1,
+                negative_marking: Number.isFinite(parsedNegativeMarking) ? parsedNegativeMarking : 0.25,
                 questions: formattedQuestions
             };
 

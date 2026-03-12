@@ -30,8 +30,76 @@ const QuizTaker = () => {
     const [preStartCountdown, setPreStartCountdown] = useState(null);
     const [hasLoadingStalled, setHasLoadingStalled] = useState(false);
     const [initSequence, setInitSequence] = useState(0);
+    const [isServerTimeExpired, setIsServerTimeExpired] = useState(false);
     const initStartedRef = useRef(false);
     const lastAutoRetryAtRef = useRef(0);
+    const isTeacherOrAdminUser = user?.role === 'teacher' || user?.role === 'admin';
+
+    const getTimerSnapshotKey = useCallback((attemptId) => `live_timer_snapshot_${attemptId}`, []);
+
+    const readTimerSnapshot = useCallback((attemptId) => {
+        try {
+            const raw = sessionStorage.getItem(getTimerSnapshotKey(attemptId));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const savedRemaining = Number(parsed?.remaining_seconds);
+            const savedAt = Number(parsed?.saved_at_ms);
+            if (!Number.isFinite(savedRemaining) || !Number.isFinite(savedAt)) {
+                return null;
+            }
+            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+            return Math.max(0, Math.floor(savedRemaining) - elapsedSeconds);
+        } catch (_err) {
+            return null;
+        }
+    }, [getTimerSnapshotKey]);
+
+    const writeTimerSnapshot = useCallback((attemptId, remainingSeconds) => {
+        try {
+            sessionStorage.setItem(
+                getTimerSnapshotKey(attemptId),
+                JSON.stringify({
+                    remaining_seconds: Math.max(0, Math.floor(remainingSeconds)),
+                    saved_at_ms: Date.now(),
+                })
+            );
+        } catch (_err) {
+            // Ignore storage failures to avoid breaking quiz flow.
+        }
+    }, [getTimerSnapshotKey]);
+
+    const clearTimerSnapshot = useCallback((attemptId) => {
+        try {
+            sessionStorage.removeItem(getTimerSnapshotKey(attemptId));
+        } catch (_err) {
+            // Ignore storage failures.
+        }
+    }, [getTimerSnapshotKey]);
+
+    const normalizeRemainingSeconds = useCallback((rawSeconds, durationMinutes, baselineSeconds = null) => {
+        const numeric = Number(rawSeconds);
+        if (!Number.isFinite(numeric)) {
+            return null;
+        }
+
+        let normalized = Math.max(0, Math.floor(numeric));
+
+        const configuredCap = Number(durationMinutes) > 0 ? Math.floor(Number(durationMinutes) * 60) : null;
+        if (Number.isFinite(configuredCap) && configuredCap > 0) {
+            normalized = Math.min(normalized, configuredCap);
+        }
+
+        // Preview mode safety: never allow server sync to exceed configured quiz duration.
+        if (isTeacherOrAdminUser) {
+            const baselineCap = Number.isFinite(baselineSeconds) ? Math.floor(Number(baselineSeconds)) : null;
+            const cap = baselineCap ?? configuredCap;
+            if (Number.isFinite(cap) && cap > 0) {
+                normalized = Math.min(normalized, cap);
+            }
+        }
+
+        return normalized;
+    }, [isTeacherOrAdminUser]);
 
     const parseStartDate = useCallback((value) => {
         if (!value) return null;
@@ -40,14 +108,7 @@ const QuizTaker = () => {
         const raw = String(value).trim();
         if (!raw) return null;
 
-        let normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-
-        // Backend may return UTC-naive datetime strings (e.g. "2026-03-08T08:25:00").
-        // Interpret such strings as UTC to avoid timezone drift on student devices.
-        const hasExplicitTz = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
-        if (!hasExplicitTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?$/.test(normalized)) {
-            normalized = `${normalized}Z`;
-        }
+        const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
 
         const parsed = new Date(normalized);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -111,13 +172,19 @@ const QuizTaker = () => {
                 setQuiz(quizData);
 
                 // Teachers and admins can preview/take quizzes anytime (skip eligibility check)
-                const isTeacherOrAdmin = user?.role === 'teacher' || user?.role === 'admin';
+                const isTeacherOrAdmin = isTeacherOrAdminUser;
                 
                 // Check eligibility FIRST before creating attempt (skip for teachers/admins)
                 let duration = quizData.duration_minutes;
+                let timerCapDuration = quizData.duration_minutes;
+                let effectiveIsLiveSession = !!quizData?.is_live_session;
                 if (!isTeacherOrAdmin) {
                     try {
                         const eligibilityData = await quizAPI.checkEligibility(quizId);
+                        if (typeof eligibilityData?.is_live_session === 'boolean') {
+                            effectiveIsLiveSession = eligibilityData.is_live_session;
+                            setQuiz((prev) => (prev ? { ...prev, is_live_session: effectiveIsLiveSession } : prev));
+                        }
                         
                         if (!eligibilityData.eligible) {
                             const reason = eligibilityData.reason || 'You cannot take this quiz at this time.';
@@ -139,6 +206,12 @@ const QuizTaker = () => {
                         if (eligibilityData.duration_minutes) {
                             duration = eligibilityData.duration_minutes;
                         }
+
+                        // Live eligibility duration is intentionally dynamic (remaining whole minutes)
+                        // and should not be used as the countdown cap, otherwise reload snaps to xx:00.
+                        if (!effectiveIsLiveSession && eligibilityData.duration_minutes) {
+                            timerCapDuration = eligibilityData.duration_minutes;
+                        }
                     } catch (err) {
                         console.error('Eligibility check failed:', err);
                         error('Failed to verify quiz eligibility. Please try again.');
@@ -149,33 +222,74 @@ const QuizTaker = () => {
                 }
                 
                 // Store calculated duration in state for timer sync
-                setCalculatedDuration(duration);
+                setCalculatedDuration(timerCapDuration);
                 
-                // Initialize timer immediately with calculated duration
-                const initialTimeSeconds = duration * 60;
-                setTimeRemaining(initialTimeSeconds);
-                setInitialDurationSeconds(initialTimeSeconds);
+                // Initialize timer baseline. For student live sessions, defer display
+                // to server-accurate remaining-time sync to avoid minute resets on refresh.
+                const initialTimeSeconds = timerCapDuration * 60;
+                const shouldDeferInitialTimer = !isTeacherOrAdmin && effectiveIsLiveSession;
+                if (!shouldDeferInitialTimer) {
+                    setTimeRemaining(initialTimeSeconds);
+                    setInitialDurationSeconds(initialTimeSeconds);
+                }
                 
                 // Start attempt (will return existing if in progress)
                 const attemptData = await attemptAPI.startAttempt(quizId);
                 
                 // If attempt is already completed, redirect to results
                 if (attemptData.is_completed) {
+                    clearTimerSnapshot(attemptData.id);
                     navigate(`/quiz-result/${attemptData.id}`);
                     return;
                 }
                 
                 setAttempt(attemptData);
 
+                if (!isTeacherOrAdmin && effectiveIsLiveSession) {
+                    const snapshotSeconds = readTimerSnapshot(attemptData.id);
+                    const normalizedSnapshot = normalizeRemainingSeconds(
+                        snapshotSeconds,
+                        timerCapDuration,
+                        initialTimeSeconds
+                    );
+                    if (normalizedSnapshot !== null) {
+                        setTimeRemaining(normalizedSnapshot);
+                        if (normalizedSnapshot > 0) {
+                            setInitialDurationSeconds((prev) => {
+                                if (prev === null) return normalizedSnapshot;
+                                return Math.max(prev, normalizedSnapshot);
+                            });
+                        }
+                    }
+                }
+
                 // Server-authoritative timer sync (source of truth)
                 try {
                     const remainingData = await attemptAPI.getRemainingTime(attemptData.id);
+                    if (typeof remainingData?.is_expired === 'boolean') {
+                        setIsServerTimeExpired(remainingData.is_expired);
+                    }
                     if (remainingData?.remaining_seconds !== null && remainingData?.remaining_seconds !== undefined) {
-                        setTimeRemaining(remainingData.remaining_seconds);
-                        if (remainingData.remaining_seconds > 0) {
+                        const syncedSeconds = normalizeRemainingSeconds(
+                            remainingData.remaining_seconds,
+                            timerCapDuration,
+                            initialTimeSeconds
+                        );
+                        if (syncedSeconds !== null) {
+                            setTimeRemaining((prev) => {
+                                if (!isTeacherOrAdmin && effectiveIsLiveSession && prev !== null) {
+                                    return Math.min(prev, syncedSeconds);
+                                }
+                                return syncedSeconds;
+                            });
+                            if (!isTeacherOrAdmin && effectiveIsLiveSession && syncedSeconds > 0) {
+                                writeTimerSnapshot(attemptData.id, syncedSeconds);
+                            }
+                        }
+                        if ((syncedSeconds ?? 0) > 0) {
                             setInitialDurationSeconds((prev) => {
-                                if (prev === null) return remainingData.remaining_seconds;
-                                return Math.max(prev, remainingData.remaining_seconds);
+                                if (prev === null) return syncedSeconds;
+                                return Math.max(prev, syncedSeconds);
                             });
                         }
                     }
@@ -212,7 +326,7 @@ const QuizTaker = () => {
                 const isReconnection = savedAnswersData?.answers?.length > 0;
                 const previewMessage = isTeacherOrAdmin ? 'Quiz preview started' : 
                     (isReconnection ? 'Reconnected to quiz! Your progress has been restored.' : 
-                        (quizData.is_live_session ? 'Joined live quiz session!' : 'Quiz started! Good luck!'));
+                        (effectiveIsLiveSession ? 'Joined live quiz session!' : 'Quiz started! Good luck!'));
                 success(previewMessage);
             } catch (err) {
                 const errorMessage = err.data?.detail || err.message || 'Failed to start quiz';
@@ -220,6 +334,35 @@ const QuizTaker = () => {
                 if (normalizedError.includes('starts at') || normalizedError.includes('not started yet')) {
                     openPreStartView(errorMessage);
                     return;
+                }
+
+                if (normalizedError.includes('grace period expired')) {
+                    try {
+                        const eligibilityData = await quizAPI.checkEligibility(quizId);
+
+                        if (!eligibilityData.eligible) {
+                            const reason = eligibilityData.reason || errorMessage;
+                            const reasonLower = String(reason).toLowerCase();
+                            if (reasonLower.includes('starts at') || reasonLower.includes('not started')) {
+                                openPreStartView(
+                                    reason,
+                                    eligibilityData.scheduled_at || eligibilityData.live_start_time,
+                                    eligibilityData.seconds_until_start
+                                );
+                                return;
+                            }
+                            error(reason);
+                            setIsRedirecting(true);
+                            setTimeout(() => navigate('/dashboard'), 2000);
+                            return;
+                        }
+
+                        // Eligibility says yes; retry without forcing dashboard redirect.
+                        retryQuizStart();
+                        return;
+                    } catch (eligibilityErr) {
+                        console.error('Eligibility fallback after grace error failed:', eligibilityErr);
+                    }
                 }
 
                 error(errorMessage);
@@ -233,7 +376,7 @@ const QuizTaker = () => {
         };
 
         initQuiz();
-    }, [quizId, user?.role, error, navigate, success, openPreStartView, initSequence]);
+    }, [quizId, user?.role, error, navigate, success, openPreStartView, initSequence, retryQuizStart]);
 
     useEffect(() => {
         if (preStartCountdown === null || preStartCountdown <= 0) {
@@ -292,12 +435,30 @@ const QuizTaker = () => {
         const syncRemainingTime = async () => {
             try {
                 const remainingData = await attemptAPI.getRemainingTime(attempt.id);
+                if (typeof remainingData?.is_expired === 'boolean') {
+                    setIsServerTimeExpired(remainingData.is_expired);
+                }
                 if (remainingData?.remaining_seconds !== null && remainingData?.remaining_seconds !== undefined) {
-                    setTimeRemaining(remainingData.remaining_seconds);
-                    if (remainingData.remaining_seconds > 0) {
+                    const syncedSeconds = normalizeRemainingSeconds(
+                        remainingData.remaining_seconds,
+                        calculatedDuration || quiz?.duration_minutes,
+                        initialDurationSeconds
+                    );
+                    if (syncedSeconds !== null) {
+                        setTimeRemaining((prev) => {
+                            if (!isTeacherOrAdminUser && quiz?.is_live_session && prev !== null) {
+                                return Math.min(prev, syncedSeconds);
+                            }
+                            return syncedSeconds;
+                        });
+                        if (!isTeacherOrAdminUser && quiz?.is_live_session && syncedSeconds > 0) {
+                            writeTimerSnapshot(attempt.id, syncedSeconds);
+                        }
+                    }
+                    if ((syncedSeconds ?? 0) > 0) {
                         setInitialDurationSeconds((prev) => {
-                            if (prev === null) return remainingData.remaining_seconds;
-                            return Math.max(prev, remainingData.remaining_seconds);
+                            if (prev === null) return syncedSeconds;
+                            return Math.max(prev, syncedSeconds);
                         });
                     }
                 }
@@ -315,7 +476,20 @@ const QuizTaker = () => {
         }, 10000);
 
         return () => clearInterval(syncInterval);
-    }, [attempt?.id, isLoading]);
+    }, [attempt?.id, isLoading, calculatedDuration, quiz?.duration_minutes, quiz?.is_live_session, initialDurationSeconds, isTeacherOrAdminUser, normalizeRemainingSeconds, writeTimerSnapshot]);
+
+    useEffect(() => {
+        if (!attempt?.id || isTeacherOrAdminUser || !quiz?.is_live_session || timeRemaining === null) {
+            return;
+        }
+
+        if (timeRemaining > 0) {
+            writeTimerSnapshot(attempt.id, timeRemaining);
+            return;
+        }
+
+        clearTimerSnapshot(attempt.id);
+    }, [attempt?.id, isTeacherOrAdminUser, quiz?.is_live_session, timeRemaining, writeTimerSnapshot, clearTimerSnapshot]);
 
     // Timer countdown
     useEffect(() => {
@@ -331,7 +505,12 @@ const QuizTaker = () => {
 
         const timer = setInterval(() => {
             setTimeRemaining((prev) => {
+                const isLiveStudentFlow = quiz?.is_live_session && !isTeacherOrAdminUser;
                 if (prev <= 1) {
+                    // For live student sessions, only allow 0 when server confirms expiry.
+                    if (isLiveStudentFlow && !isServerTimeExpired) {
+                        return 1;
+                    }
                     return 0;
                 }
                 return prev - 1;
@@ -339,7 +518,7 @@ const QuizTaker = () => {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [quiz, attempt, isLoading, timeRemaining]);
+    }, [quiz, attempt, isLoading, timeRemaining, isTeacherOrAdminUser, isServerTimeExpired]);
 
     const handleSubmitQuiz = useCallback(async (autoSubmit = false) => {
         if (!autoSubmit && !showSubmitConfirm) {
@@ -362,6 +541,7 @@ const QuizTaker = () => {
 
         try {
             const result = await attemptAPI.submitAttempt(attempt.id, formattedAnswers);
+            clearTimerSnapshot(attempt.id);
             
             success(autoSubmit ? 'Time up! Quiz submitted automatically.' : 'Quiz submitted successfully!');
             navigate(`/quiz-result/${attempt.id}`, { state: { result } });
@@ -375,16 +555,25 @@ const QuizTaker = () => {
         } finally {
             setIsSubmitting(false);
         }
-    }, [answers, attempt, showSubmitConfirm, error, navigate, success]);
+    }, [answers, attempt, showSubmitConfirm, error, navigate, success, clearTimerSnapshot]);
 
     // Auto-submit when timer reaches 0
     const hasAutoSubmitted = useRef(false);
     useEffect(() => {
-        if (timeRemaining === 0 && timeRemaining !== null && attempt?.id && quiz && !isSubmitting && !hasAutoSubmitted.current) {
+        if (timeRemaining === null || timeRemaining !== 0 || !attempt?.id || !quiz || isSubmitting || hasAutoSubmitted.current) {
+            return;
+        }
+
+        const requiresServerExpiry = quiz.is_live_session && !isTeacherOrAdminUser;
+        if (requiresServerExpiry && !isServerTimeExpired) {
+            return;
+        }
+
+        if (!hasAutoSubmitted.current) {
             hasAutoSubmitted.current = true;
             handleSubmitQuiz(true);
         }
-    }, [timeRemaining, attempt, quiz, isSubmitting, handleSubmitQuiz]);
+    }, [timeRemaining, attempt, quiz, isSubmitting, isServerTimeExpired, isTeacherOrAdminUser, handleSubmitQuiz]);
 
     const formatTime = (seconds) => {
         if (seconds === null) return '--:--';
@@ -408,9 +597,17 @@ const QuizTaker = () => {
             return;
         }
         
-        setAnswers({
-            ...answers,
-            [questionId]: answer
+        const previouslySelected = answers[questionId];
+        const nextAnswer = previouslySelected === answer ? '' : answer;
+
+        setAnswers((prev) => {
+            const updated = { ...prev };
+            if (!nextAnswer) {
+                delete updated[questionId];
+            } else {
+                updated[questionId] = nextAnswer;
+            }
+            return updated;
         });
         
         // Auto-save answer to backend (for refresh protection)
@@ -418,7 +615,7 @@ const QuizTaker = () => {
             try {
                 await attemptAPI.saveAnswer(attempt.id, {
                     question_id: questionId,
-                    answer_text: answer
+                    answer_text: nextAnswer
                 });
             } catch (err) {
                 console.error('Failed to auto-save answer:', err);
@@ -435,7 +632,19 @@ const QuizTaker = () => {
         : ((calculatedDuration && timeRemaining !== null) ? (timeRemaining / (calculatedDuration * 60)) * 100 : 100);
 
     // Show warning if time has expired
-    if (timeRemaining !== null && timeRemaining === 0 && !isSubmitting && attempt?.id) {
+    const shouldShowExpiredScreen = (
+        timeRemaining !== null
+        && timeRemaining === 0
+        && !isSubmitting
+        && attempt?.id
+        && (
+            !quiz?.is_live_session
+            || isTeacherOrAdminUser
+            || isServerTimeExpired
+        )
+    );
+
+    if (shouldShowExpiredScreen) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
@@ -511,13 +720,8 @@ const QuizTaker = () => {
                             <p className="text-2xl font-mono font-bold text-blue-700">{formatCountdown(preStartCountdown)}</p>
                         </div>
                     )}
+                    <p className="text-xs text-gray-500 mb-4">This page will auto-check and continue when the quiz starts.</p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <button
-                            onClick={retryQuizStart}
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                            Retry
-                        </button>
                         <button
                             onClick={() => navigate('/dashboard')}
                             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
@@ -602,7 +806,7 @@ const QuizTaker = () => {
                             </div>
                         </div>
 
-                        {/* Timer */}
+                        {/* Timer + Top Submit */}
                         <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-6 w-full sm:w-auto">
                             {quiz?.is_live_session && (
                                 <div className="flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-full border-2 border-red-500 animate-pulse">
@@ -633,6 +837,14 @@ const QuizTaker = () => {
                                     ></div>
                                 </div>
                             </div>
+                            <button
+                                onClick={() => setShowSubmitConfirm(true)}
+                                disabled={isSubmitting}
+                                className="px-4 sm:px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
+                            >
+                                <Send size={16} className="inline mr-2" />
+                                Submit Quiz
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -752,24 +964,14 @@ const QuizTaker = () => {
                                     Previous
                                 </button>
 
-                                {currentQuestionIndex === totalQuestions - 1 ? (
-                                    <button
-                                        onClick={() => setShowSubmitConfirm(true)}
-                                        disabled={isSubmitting}
-                                        className="w-full sm:w-auto justify-center flex items-center px-8 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
-                                    >
-                                        <Send size={20} className="mr-2" />
-                                        Submit Quiz
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={() => setCurrentQuestionIndex(Math.min(totalQuestions - 1, currentQuestionIndex + 1))}
-                                        className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
-                                    >
-                                        Next
-                                        <ChevronRight size={20} className="ml-2" />
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => setCurrentQuestionIndex(Math.min(totalQuestions - 1, currentQuestionIndex + 1))}
+                                    disabled={currentQuestionIndex === totalQuestions - 1}
+                                    className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Next
+                                    <ChevronRight size={20} className="ml-2" />
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -836,15 +1038,9 @@ const QuizTaker = () => {
                                 </div>
                             </div>
 
-                            {/* Quick Submit */}
-                            <button
-                                onClick={() => setShowSubmitConfirm(true)}
-                                disabled={isSubmitting}
-                                className="w-full mt-6 px-4 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
-                            >
-                                <Send size={18} className="inline mr-2" />
-                                Submit Quiz
-                            </button>
+                            <p className="mt-6 text-xs text-gray-500">
+                                Submit button is available in the top header to avoid accidental submission.
+                            </p>
                         </div>
                     </div>
                 </div>

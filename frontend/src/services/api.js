@@ -17,13 +17,46 @@ function resolveApiBaseUrl() {
         .map((value) => value.trim())
         .filter(Boolean);
 
-    // Prefer explicit backend ports when multiple URLs are provided accidentally.
-    const preferred = candidates.find((value) => /:8000(?:\/|$)/.test(value)) || candidates[0];
+    // In development, localhost:8000 is usually the intended backend.
+    if (import.meta.env.DEV) {
+        const devPreferred = candidates.find((value) => /localhost|127\.0\.0\.1/i.test(value) || /:8000(?:\/|$)/.test(value));
+        return devPreferred || candidates[0];
+    }
+
+    // In production, avoid local/private addresses if they were accidentally configured.
+    const isDisallowedProductionHost = (value) => {
+        try {
+            const parsed = new URL(value);
+            const host = (parsed.hostname || '').toLowerCase();
+            const localhostHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+            const privateIpv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
+            return localhostHost || privateIpv4 || parsed.port === '8000';
+        } catch {
+            return /localhost|127\.0\.0\.1|:8000(?:\/|$)/i.test(value);
+        }
+    };
+
+    const productionCandidates = candidates.filter((value) => !isDisallowedProductionHost(value));
+    const preferred = productionCandidates[0] || '';
+
+    if (!preferred && typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin;
+    }
+
     return preferred;
 }
 
 const rawApiUrl = resolveApiBaseUrl();
-export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+let normalizedApiBaseUrl = rawApiUrl.replace(/\/+$/, '');
+
+if (!import.meta.env.DEV && typeof window !== 'undefined') {
+    const looksLocal = /https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(normalizedApiBaseUrl);
+    if (looksLocal && window.location?.origin) {
+        normalizedApiBaseUrl = window.location.origin;
+    }
+}
+
+export const API_BASE_URL = normalizedApiBaseUrl;
 if (import.meta.env.DEV) {
     console.log('🔧 API Configuration:', {
         API_BASE_URL,
@@ -66,15 +99,6 @@ function normalizeServerDateStrings(value) {
             normalized[key] = normalizeServerDateStrings(nestedValue);
         }
         return normalized;
-    }
-
-    if (typeof value === 'string') {
-        // Backend may return UTC-naive datetime strings (no timezone suffix).
-        // Interpret them as UTC so browser local rendering is correct.
-        const isNaiveIsoDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value);
-        if (isNaiveIsoDateTime) {
-            return `${value}Z`;
-        }
     }
 
     return value;
@@ -290,7 +314,7 @@ export const userAPI = {
 
 export const quizAPI = {
     getAllQuizzes: () => fetchAPI('/api/v1/quizzes/'),
-    getQuiz: (id) => fetchAPI(`/api/v1/quizzes/${id}`),
+    getQuiz: (id) => fetchAPI(`/api/v1/quizzes/${id}`, { skipCache: true }),
     checkEligibility: (id) => fetchAPI(`/api/v1/quizzes/${id}/eligibility`, { skipCache: true }),
     createQuiz: (quizData) => fetchAPI('/api/v1/quizzes/', {
         method: 'POST',
@@ -319,7 +343,7 @@ export const attemptAPI = {
             : '/api/v1/attempts/all-attempts';
         return fetchAPI(url);
     },
-    getAttempt: (id) => fetchAPI(`/api/v1/attempts/${id}`),
+    getAttempt: (id) => fetchAPI(`/api/v1/attempts/${id}`, { skipCache: true }),
     getAttemptReview: async (id) => {
         try {
             return await fetchAPI(`/api/v1/attempts/${id}/review`);
@@ -343,6 +367,89 @@ export const attemptAPI = {
         method: 'POST',
         body: JSON.stringify(answerData),
     }),
+    kickOutAttempt: async (attemptId) => {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            throw new APIError('Authentication required', 401, { detail: 'Missing access token' });
+        }
+
+        const numericAttemptId = Number(attemptId);
+        if (!Number.isFinite(numericAttemptId) || numericAttemptId <= 0) {
+            throw new APIError('Invalid attempt id', 400, { detail: `Invalid attempt id: ${attemptId}` });
+        }
+
+        const isValidKickOutResponse = (payload) => (
+            payload
+            && typeof payload === 'object'
+            && payload.status === 'kicked_out'
+            && Number.isFinite(Number(payload.attempt_id))
+        );
+
+        const candidates = [
+            `/api/v1/attempts/actions/${numericAttemptId}/kick-out`,
+            `/api/v1/attempts/actions/kick-out?attempt_id=${numericAttemptId}`,
+            `/api/v1/attempts/${numericAttemptId}/kick-out`,
+            `/api/v1/attempts/kick-out/${numericAttemptId}`,
+            `/api/v1/attempts/kick-out?attempt_id=${numericAttemptId}`,
+        ];
+
+        const methods = ['POST', 'GET'];
+        let lastError = null;
+        let lastTried = null;
+
+        for (const endpoint of candidates) {
+            for (const method of methods) {
+                lastTried = `${method} ${endpoint}`;
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method,
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }).catch((networkErr) => {
+                    throw new APIError(networkErr?.message || 'Network error', 0, { detail: 'Kick-out request failed' });
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const apiError = new APIError(
+                        errorData?.detail || `HTTP ${response.status}`,
+                        response.status,
+                        errorData
+                    );
+                    lastError = apiError;
+
+                    if (response.status === 404 || response.status === 405 || response.status === 422) {
+                        continue;
+                    }
+
+                    throw apiError;
+                }
+
+                const payload = await response.json().catch(() => null);
+                if (isValidKickOutResponse(payload)) {
+                    clearApiCache();
+                    return payload;
+                }
+
+                lastError = new APIError('Invalid kick-out response', 502, { detail: 'Unexpected response payload' });
+            }
+        }
+
+        if (lastError) {
+            lastError.data = {
+                ...(lastError.data || {}),
+                backend_url: API_BASE_URL,
+                last_tried: lastTried,
+            };
+            throw lastError;
+        }
+
+        throw new APIError('Kick out endpoint not available', 404, {
+            detail: 'Kick-out route unavailable',
+            backend_url: API_BASE_URL,
+            last_tried: lastTried,
+        });
+    },
     getSavedAnswers: (attemptId) => fetchAPI(`/api/v1/attempts/${attemptId}/answers`),
 };
 
