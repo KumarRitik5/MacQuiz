@@ -74,7 +74,8 @@ class APIError extends Error {
     }
 }
 
-const GET_CACHE_TTL_MS = 8000;
+// Keep a short-lived cache to reduce duplicate GET calls across dashboard widgets.
+const GET_CACHE_TTL_MS = 25000;
 const getResponseCache = new Map();
 
 function cloneJsonData(data) {

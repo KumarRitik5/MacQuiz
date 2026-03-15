@@ -3251,6 +3251,9 @@ const StudentResultsView = ({ selfOnly = false }) => {
     const [resultsSortBy, setResultsSortBy] = useState('submitted_desc');
     const [kickingAttemptId, setKickingAttemptId] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
+    const LIVE_RESULTS_POLL_MS = 30000;
+    const FOCUS_REFRESH_THROTTLE_MS = 15000;
+    const lastFocusRefreshRef = useRef(0);
 
     const isQuizLiveNow = useCallback((quiz) => {
         if (!quiz?.is_live_session || !quiz?.is_active) {
@@ -3372,15 +3375,25 @@ const StudentResultsView = ({ selfOnly = false }) => {
         }
 
         const liveRefresh = setInterval(() => {
+            if (document.hidden) {
+                return;
+            }
             // Live monitor refreshes attempts data only without blocking the whole page.
             fetchAttemptsOnly({ silent: true });
-        }, 10000);
+        }, LIVE_RESULTS_POLL_MS);
 
         return () => clearInterval(liveRefresh);
     }, [fetchAttemptsOnly, quizzes, attempts, isQuizLiveNow]);
 
     useEffect(() => {
-        const onFocus = () => fetchAttemptsOnly({ silent: true });
+        const onFocus = () => {
+            const now = Date.now();
+            if (now - lastFocusRefreshRef.current < FOCUS_REFRESH_THROTTLE_MS) {
+                return;
+            }
+            lastFocusRefreshRef.current = now;
+            fetchAttemptsOnly({ silent: true });
+        };
         window.addEventListener('focus', onFocus);
         return () => window.removeEventListener('focus', onFocus);
     }, [fetchAttemptsOnly]);
@@ -3693,7 +3706,7 @@ const StudentResultsView = ({ selfOnly = false }) => {
                     <h3 className="text-lg font-bold text-red-900">Live Session Monitor</h3>
                     <span className="text-xs text-red-700 bg-red-100 px-2 py-1 rounded-full">
                         {liveMonitorAutoRefreshEnabled
-                            ? `Auto-refresh: 10s${isBackgroundRefreshing ? ' (syncing...)' : ''}`
+                            ? `Auto-refresh: 30s${isBackgroundRefreshing ? ' (syncing...)' : ''}`
                             : 'Auto-refresh paused (no active live session)'}
                     </span>
                 </div>
