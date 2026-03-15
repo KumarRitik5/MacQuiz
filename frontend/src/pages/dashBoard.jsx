@@ -2348,14 +2348,14 @@ const TeacherQuizManagement = () => {
                                 return start <= now && end > now;
                             })();
                             return (
-                            <div key={quiz.id} className={`border-2 rounded-xl p-6 transition ${
+                            <div key={quiz.id} className={`border-2 rounded-xl p-4 sm:p-6 transition ${
                                 isLiveNow
                                     ? 'border-green-200 bg-green-50/30 hover:border-green-300'
                                     : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
                             }`}>
-                                <div className="flex justify-between items-start">
+                                <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                                             <h3 className="text-xl font-bold text-gray-900">{quizTitle}</h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                                                 isLiveNow
@@ -2366,7 +2366,7 @@ const TeacherQuizManagement = () => {
                                             </span>
                                         </div>
                                         <p className="text-gray-600 mt-1">{quizDescription}</p>
-                                        <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
+                                        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-3 text-sm text-gray-500">
                                             <span className="flex items-center">
                                                 <FileText size={16} className="mr-1" />
                                                 {quiz.questions?.length || quiz.total_questions || 0} Questions
@@ -2385,25 +2385,25 @@ const TeacherQuizManagement = () => {
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center space-x-2">
+                                    <div className="w-full lg:w-auto flex flex-wrap items-center gap-2">
                                         {quiz.is_active ? (
                                             <button 
                                                 onClick={() => handleToggleQuizStatus(quiz.id, quiz.is_active)}
-                                                className="px-3 py-2 rounded-lg font-semibold transition text-sm text-orange-600 hover:bg-orange-50 border border-orange-200"
+                                                className="flex-1 sm:flex-none min-w-[120px] px-3 py-2 rounded-lg font-semibold transition text-sm text-orange-600 hover:bg-orange-50 border border-orange-200"
                                             >
                                                 {isLiveNow ? '🔴 End Live' : '🔴 Deactivate'}
                                             </button>
                                         ) : (
                                             <button 
                                                 onClick={() => setAssignQuizModal({ open: true, quiz })}
-                                                className="px-3 py-2 rounded-lg font-semibold transition text-sm text-green-600 hover:bg-green-50 border border-green-200"
+                                                className="flex-1 sm:flex-none min-w-[120px] px-3 py-2 rounded-lg font-semibold transition text-sm text-green-600 hover:bg-green-50 border border-green-200"
                                             >
                                                 🟢 Go Live
                                             </button>
                                         )}
                                         <button 
                                             onClick={() => navigate(`/quiz/${quiz.id}/take`)}
-                                            className="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold transition text-sm"
+                                            className="flex-1 sm:flex-none min-w-[92px] px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold transition text-sm border border-blue-100"
                                         >
                                             Preview
                                         </button>
@@ -2412,13 +2412,13 @@ const TeacherQuizManagement = () => {
                                                 setShowCreateQuizInline(false);
                                                 setInlineEditQuizId(quiz.id);
                                             }}
-                                            className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-semibold transition text-sm"
+                                            className="flex-1 sm:flex-none min-w-[92px] px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-semibold transition text-sm border border-gray-200"
                                         >
                                             Edit
                                         </button>
                                         <button 
                                             onClick={() => handleDeleteQuiz(quiz.id)}
-                                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold transition text-sm"
+                                            className="flex-1 sm:flex-none min-w-[92px] px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold transition text-sm border border-red-100"
                                         >
                                             Delete
                                         </button>
