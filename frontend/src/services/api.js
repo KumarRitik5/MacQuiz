@@ -110,17 +110,69 @@ export function clearApiCache() {
 }
 
 function isJwtExpired(token) {
+    const payload = decodeJwtPayload(token);
+    if (!payload?.exp) return false;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    // Small grace avoids false-expiry due to minor client clock skew.
+    return nowSeconds >= Number(payload.exp) + 30;
+}
+
+function decodeJwtPayload(token) {
     try {
         const parts = token.split('.');
-        if (parts.length !== 3) return false;
+        if (parts.length !== 3) return null;
         const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-        const payload = JSON.parse(payloadJson);
-        if (!payload.exp) return false;
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        return nowSeconds >= Number(payload.exp);
+        return JSON.parse(payloadJson);
     } catch {
         return false;
     }
+}
+
+function isJwtNearExpiry(token, bufferSeconds = 120) {
+    const payload = decodeJwtPayload(token);
+    if (!payload?.exp) return false;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    return Number(payload.exp) - nowSeconds <= bufferSeconds;
+}
+
+let tokenRefreshPromise = null;
+
+async function ensureFreshAccessToken(token) {
+    if (!token || !isJwtNearExpiry(token)) {
+        return token;
+    }
+
+    if (!tokenRefreshPromise) {
+        tokenRefreshPromise = (async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    // Keep old token for this request; backend 401 will handle forced logout if needed.
+                    return token;
+                }
+
+                const data = await response.json().catch(() => null);
+                const nextToken = data?.access_token;
+                if (nextToken) {
+                    localStorage.setItem('access_token', nextToken);
+                    return nextToken;
+                }
+                return token;
+            } catch {
+                return token;
+            } finally {
+                tokenRefreshPromise = null;
+            }
+        })();
+    }
+
+    return tokenRefreshPromise;
 }
 
 async function fetchAPI(endpoint, options = {}) {
@@ -133,7 +185,12 @@ async function fetchAPI(endpoint, options = {}) {
     }
     const url = `${API_BASE_URL}${endpoint}`;
     const method = (options.method || 'GET').toUpperCase();
-    const token = localStorage.getItem('access_token');
+    let token = localStorage.getItem('access_token');
+
+    if (token && !options.skipAuth && endpoint !== '/api/v1/auth/refresh') {
+        token = await ensureFreshAccessToken(token);
+    }
+
     if (token && isJwtExpired(token)) {
         localStorage.removeItem('access_token');
         // If the token is expired, treat as logged out
