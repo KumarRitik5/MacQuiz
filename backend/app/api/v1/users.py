@@ -291,7 +291,7 @@ async def update_current_user_info(
     db.refresh(current_user)
     return current_user
 
-@router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_role(["admin"]))])
+@router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_role(["admin", "teacher"]))])
 async def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -303,6 +303,20 @@ async def get_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    
+    # Teachers can only view students in their department
+    if current_user.role == "teacher":
+        if user.role != "student":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view student profiles"
+            )
+        if current_user.department and user.department != current_user.department:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view students in your department"
+            )
+    
     return user
 
 @router.put("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_role(["admin"]))])
