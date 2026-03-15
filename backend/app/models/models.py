@@ -38,6 +38,7 @@ class User(Base):
     department = Column(String(DEPARTMENT_LENGTH), nullable=True)
     class_year = Column(String(YEAR_LENGTH), nullable=True)  # '1st Year', '2nd Year', etc.
     phone_number = Column(String(PHONE_LENGTH), nullable=True)
+    profile_image = Column(Text, nullable=True)
     
     # Relationships
     quizzes_created = relationship("Quiz", back_populates="creator", foreign_keys="Quiz.creator_id")

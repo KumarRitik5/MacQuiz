@@ -280,6 +280,10 @@ export const authAPI = {
 
 export const userAPI = {
     getCurrentUser: () => fetchAPI('/api/v1/users/me'),
+    updateCurrentUser: (userData) => fetchAPI('/api/v1/users/me', {
+        method: 'PUT',
+        body: JSON.stringify(userData),
+    }),
     getAllUsers: () => fetchAPI('/api/v1/users/'),
     getUser: (id) => fetchAPI(`/api/v1/users/${id}`),
     createUser: (userData) => fetchAPI('/api/v1/users/', {

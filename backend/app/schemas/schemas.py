@@ -31,11 +31,13 @@ class UserUpdate(BaseModel):
     class_year: Optional[str] = None
     student_id: Optional[str] = None
     phone_number: Optional[str] = None
+    profile_image: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=8)  # Allow password reset
 
 class UserResponse(UserBase):
     id: int
+    profile_image: Optional[str] = None
     is_active: bool
     created_at: datetime
     last_active: datetime

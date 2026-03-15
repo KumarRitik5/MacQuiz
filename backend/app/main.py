@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+from sqlalchemy import inspect, text
 from app.core.config import settings
 from app.db.database import engine, Base, SessionLocal
 from app.models.models import User
@@ -9,6 +10,17 @@ from app.core.security import get_password_hash
 from app.api.v1 import auth, users, quizzes, attempts, subjects, question_bank, analytics
 
 logger = logging.getLogger(__name__)
+
+
+def ensure_user_profile_image_column() -> None:
+    """Best-effort schema compatibility for existing databases."""
+    inspector = inspect(engine)
+    user_columns = {col["name"] for col in inspector.get_columns("users")}
+    if "profile_image" in user_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE users ADD COLUMN profile_image TEXT"))
 
 def init_admin() -> None:
     """Create the initial admin user if it doesn't exist.
@@ -48,6 +60,7 @@ async def lifespan(app: FastAPI):
     app.state.db_startup_error = None
     try:
         Base.metadata.create_all(bind=engine)
+        ensure_user_profile_image_column()
         init_admin()
     except Exception as error:
         app.state.db_startup_ok = False

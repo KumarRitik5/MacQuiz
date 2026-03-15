@@ -258,6 +258,39 @@ async def get_current_user_info(
 ):
     return current_user
 
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user_info(
+    user_data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    update_data = user_data.model_dump(exclude_unset=True)
+
+    # Prevent role/identity privilege escalation through profile updates.
+    disallowed_fields = {"is_active", "student_id", "department", "class_year", "password"}
+    for field in disallowed_fields:
+        update_data.pop(field, None)
+
+    if "profile_image" in update_data:
+        image_value = update_data.get("profile_image")
+        if image_value:
+            if not isinstance(image_value, str):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid profile image format")
+            if len(image_value) > 3_000_000:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Profile image is too large")
+        else:
+            update_data["profile_image"] = None
+
+    allowed_fields = {"first_name", "last_name", "phone_number", "profile_image"}
+    for field, value in update_data.items():
+        if field in allowed_fields:
+            setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
 @router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_role(["admin"]))])
 async def get_user(
     user_id: int,
@@ -319,6 +352,7 @@ async def update_user(
         "department",
         "class_year",
         "phone_number",
+        "profile_image",
         "is_active",
     }
     for field, value in update_data.items():

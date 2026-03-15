@@ -93,8 +93,6 @@ const getDisplayUserId = (user) => {
     return `ADM-${user.id ?? 'N/A'}`;
 };
 
-const getProfileImageStorageKey = (userId) => `macquiz_profile_image_${userId}`;
-
 
 /**
  * --- UTILITY COMPONENTS ---
@@ -4207,8 +4205,8 @@ const StudentUnifiedView = ({ activeTab, user, profileImage, onPickProfileImage,
  */
 export default function AdminDashboard() {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
-    const { success } = useToast();
+    const { user, logout, checkAuth } = useAuth();
+    const { success, error } = useToast();
 
     const roleLabel = user?.role === 'teacher' ? 'Teacher' : user?.role === 'student' ? 'Student' : 'Administrator';
     const portalLabel = user?.role === 'teacher' ? 'Teacher Portal' : user?.role === 'student' ? 'Student Portal' : 'Admin';
@@ -4234,9 +4232,8 @@ export default function AdminDashboard() {
             setProfileImage('');
             return;
         }
-        const savedImage = localStorage.getItem(getProfileImageStorageKey(user.id)) || '';
-        setProfileImage(savedImage);
-    }, [user?.id]);
+        setProfileImage(user?.profile_image || '');
+    }, [user?.id, user?.profile_image]);
 
     const triggerProfileImagePicker = () => {
         profileImageInputRef.current?.click();
@@ -4248,13 +4245,13 @@ export default function AdminDashboard() {
 
         const isImage = file.type?.startsWith('image/');
         if (!isImage) {
-            alert('Please select an image file.');
+            error('Please select an image file.');
             return;
         }
 
         // Keep localStorage usage bounded.
         if (file.size > 2 * 1024 * 1024) {
-            alert('Image is too large. Please select an image smaller than 2 MB.');
+            error('Image is too large. Please select an image smaller than 2 MB.');
             return;
         }
 
@@ -4266,13 +4263,13 @@ export default function AdminDashboard() {
                 reader.readAsDataURL(file);
             });
 
-            if (user?.id) {
-                localStorage.setItem(getProfileImageStorageKey(user.id), dataUrl);
-            }
+            await userAPI.updateCurrentUser({ profile_image: dataUrl });
             setProfileImage(dataUrl);
+            await checkAuth();
             setIsProfileMenuOpen(false);
+            success('Profile image updated successfully.');
         } catch (_err) {
-            alert('Failed to load selected image.');
+            error('Failed to update profile image.');
         } finally {
             // Allow selecting the same file again.
             if (event.target) {
@@ -4282,11 +4279,16 @@ export default function AdminDashboard() {
     };
 
     const removeProfileImage = () => {
-        if (user?.id) {
-            localStorage.removeItem(getProfileImageStorageKey(user.id));
-        }
-        setProfileImage('');
-        setIsProfileMenuOpen(false);
+        userAPI.updateCurrentUser({ profile_image: null })
+            .then(async () => {
+                setProfileImage('');
+                await checkAuth();
+                setIsProfileMenuOpen(false);
+                success('Profile image removed.');
+            })
+            .catch(() => {
+                error('Failed to remove profile image.');
+            });
     };
 
     const fetchDashboardStats = useCallback(async () => {
