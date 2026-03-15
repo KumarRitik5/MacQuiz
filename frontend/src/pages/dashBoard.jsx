@@ -1983,6 +1983,7 @@ const TeacherStudentsView = () => {
     const [students, setStudents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
+    const [studentSortBy, setStudentSortBy] = useState('name_asc');
 
     const fetchTeacherStudents = useCallback(async () => {
         setIsLoading(true);
@@ -2012,6 +2013,26 @@ const TeacherStudentsView = () => {
         fetchTeacherStudents();
     };
 
+    const sortedStudents = useMemo(() => {
+        const list = [...students];
+        list.sort((a, b) => {
+            const nameA = `${a?.first_name || ''} ${a?.last_name || ''}`.trim().toLowerCase();
+            const nameB = `${b?.first_name || ''} ${b?.last_name || ''}`.trim().toLowerCase();
+            const idA = String(a?.student_id || '').toLowerCase();
+            const idB = String(b?.student_id || '').toLowerCase();
+            const emailA = String(a?.email || '').toLowerCase();
+            const emailB = String(b?.email || '').toLowerCase();
+
+            if (studentSortBy === 'name_desc') return nameB.localeCompare(nameA);
+            if (studentSortBy === 'id_asc') return idA.localeCompare(idB, undefined, { numeric: true });
+            if (studentSortBy === 'id_desc') return idB.localeCompare(idA, undefined, { numeric: true });
+            if (studentSortBy === 'email_asc') return emailA.localeCompare(emailB);
+            if (studentSortBy === 'email_desc') return emailB.localeCompare(emailA);
+            return nameA.localeCompare(nameB);
+        });
+        return list;
+    }, [students, studentSortBy]);
+
     if (showAddForm) {
         return (
             <UserCreationForm 
@@ -2029,13 +2050,30 @@ const TeacherStudentsView = () => {
                     <h2 className="text-2xl font-bold text-gray-900">My Students</h2>
                     <p className="text-gray-600 mt-1">View and manage your students</p>
                 </div>
-                <button
-                    onClick={() => setShowAddForm(true)}
-                    className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
-                >
-                    <Plus size={20} className="mr-2" />
-                    Add Student
-                </button>
+                <div className="flex items-center gap-3">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Sort By</label>
+                        <select
+                            value={studentSortBy}
+                            onChange={(e) => setStudentSortBy(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="name_asc">Name A-Z</option>
+                            <option value="name_desc">Name Z-A</option>
+                            <option value="id_asc">Student ID Asc</option>
+                            <option value="id_desc">Student ID Desc</option>
+                            <option value="email_asc">Email A-Z</option>
+                            <option value="email_desc">Email Z-A</option>
+                        </select>
+                    </div>
+                    <button
+                        onClick={() => setShowAddForm(true)}
+                        className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
+                    >
+                        <Plus size={20} className="mr-2" />
+                        Add Student
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (
@@ -2056,7 +2094,7 @@ const TeacherStudentsView = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {students.map((student) => (
+                            {sortedStudents.map((student) => (
                                 <tr key={student.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="font-semibold text-gray-900">{student.first_name} {student.last_name}</div>
@@ -2098,6 +2136,7 @@ const TeacherQuizManagement = () => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showCreateQuizInline, setShowCreateQuizInline] = useState(false);
     const [inlineEditQuizId, setInlineEditQuizId] = useState(null);
+    const [quizSortBy, setQuizSortBy] = useState('title_asc');
 
     const fetchQuizzes = useCallback(async () => {
         setIsLoading(true);
@@ -2171,6 +2210,28 @@ const TeacherQuizManagement = () => {
         setRefreshTrigger(prev => prev + 1);
     };
 
+    const sortedQuizzes = useMemo(() => {
+        const list = quizzes.filter((quiz) => quiz && quiz.id);
+        return [...list].sort((a, b) => {
+            const titleA = String(a?.title || '').toLowerCase();
+            const titleB = String(b?.title || '').toLowerCase();
+            const attemptsA = Number(a?.attempts || 0);
+            const attemptsB = Number(b?.attempts || 0);
+            const durationA = Number(a?.duration_minutes || 0);
+            const durationB = Number(b?.duration_minutes || 0);
+            const liveA = a?.is_active ? 1 : 0;
+            const liveB = b?.is_active ? 1 : 0;
+
+            if (quizSortBy === 'title_desc') return titleB.localeCompare(titleA);
+            if (quizSortBy === 'attempts_desc') return attemptsB - attemptsA;
+            if (quizSortBy === 'attempts_asc') return attemptsA - attemptsB;
+            if (quizSortBy === 'duration_desc') return durationB - durationA;
+            if (quizSortBy === 'duration_asc') return durationA - durationB;
+            if (quizSortBy === 'live_first') return liveB - liveA;
+            return titleA.localeCompare(titleB);
+        });
+    }, [quizzes, quizSortBy]);
+
     if (showCreateQuizInline || inlineEditQuizId) {
         return (
             <div className="space-y-4">
@@ -2205,6 +2266,20 @@ const TeacherQuizManagement = () => {
                         <p className="text-gray-600 mt-1">Create and manage quizzes for students</p>
                     </div>
                     <div className="flex gap-3">
+                        <select
+                            value={quizSortBy}
+                            onChange={(e) => setQuizSortBy(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            title="Sort quizzes"
+                        >
+                            <option value="title_asc">Sort: Title A-Z</option>
+                            <option value="title_desc">Sort: Title Z-A</option>
+                            <option value="live_first">Sort: Live First</option>
+                            <option value="attempts_desc">Sort: Attempts High-Low</option>
+                            <option value="attempts_asc">Sort: Attempts Low-High</option>
+                            <option value="duration_desc">Sort: Duration High-Low</option>
+                            <option value="duration_asc">Sort: Duration Low-High</option>
+                        </select>
                         <button
                             onClick={() => setRefreshTrigger(prev => prev + 1)}
                             className="flex items-center px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition shadow-md"
@@ -2255,7 +2330,7 @@ const TeacherQuizManagement = () => {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {quizzes.filter((quiz) => quiz && quiz.id).map((quiz) => {
+                        {sortedQuizzes.map((quiz) => {
                             const quizTitle = typeof quiz.title === 'string' && quiz.title.trim() ? quiz.title : 'Untitled Quiz';
                             const quizDescription = typeof quiz.description === 'string' && quiz.description.trim()
                                 ? quiz.description
@@ -3172,6 +3247,8 @@ const StudentResultsView = ({ selfOnly = false }) => {
     const [liveQuizFocus, setLiveQuizFocus] = useState('all');
     const [liveMinScore, setLiveMinScore] = useState('');
     const [liveMaxScore, setLiveMaxScore] = useState('');
+    const [liveSortBy, setLiveSortBy] = useState('score_desc');
+    const [resultsSortBy, setResultsSortBy] = useState('submitted_desc');
     const [kickingAttemptId, setKickingAttemptId] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -3366,11 +3443,46 @@ const StudentResultsView = ({ selfOnly = false }) => {
     }).sort((a, b) => {
         const scoreA = Number(a?.live_percentage ?? a?.percentage ?? a?.progress_percentage ?? 0);
         const scoreB = Number(b?.live_percentage ?? b?.percentage ?? b?.progress_percentage ?? 0);
+        const nameA = String(a?.student_name || a?.student_email || a?.student_id || '').toLowerCase();
+        const nameB = String(b?.student_name || b?.student_email || b?.student_id || '').toLowerCase();
+        const elapsedA = Number(a?.elapsed_seconds ?? 0);
+        const elapsedB = Number(b?.elapsed_seconds ?? 0);
+
+        if (liveSortBy === 'score_asc') return scoreA - scoreB;
+        if (liveSortBy === 'elapsed_desc') return elapsedB - elapsedA;
+        if (liveSortBy === 'elapsed_asc') return elapsedA - elapsedB;
+        if (liveSortBy === 'name_asc') return nameA.localeCompare(nameB);
+        if (liveSortBy === 'name_desc') return nameB.localeCompare(nameA);
+
         if (scoreA !== scoreB) {
             return scoreB - scoreA;
         }
         return Number(b?.answered_count ?? 0) - Number(a?.answered_count ?? 0);
     });
+
+    const sortedLatestCompletedAttempts = useMemo(() => {
+        const list = [...latestCompletedAttempts];
+        list.sort((a, b) => {
+            const submittedA = a?.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+            const submittedB = b?.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+            const percA = Number(a?.percentage ?? 0);
+            const percB = Number(b?.percentage ?? 0);
+            const scoreA = Number(a?.score ?? 0);
+            const scoreB = Number(b?.score ?? 0);
+            const studentA = String(a?.student_name || a?.student_email || a?.student_id || '').toLowerCase();
+            const studentB = String(b?.student_name || b?.student_email || b?.student_id || '').toLowerCase();
+
+            if (resultsSortBy === 'submitted_asc') return submittedA - submittedB;
+            if (resultsSortBy === 'percentage_desc') return percB - percA;
+            if (resultsSortBy === 'percentage_asc') return percA - percB;
+            if (resultsSortBy === 'score_desc') return scoreB - scoreA;
+            if (resultsSortBy === 'score_asc') return scoreA - scoreB;
+            if (resultsSortBy === 'student_asc') return studentA.localeCompare(studentB);
+            if (resultsSortBy === 'student_desc') return studentB.localeCompare(studentA);
+            return submittedB - submittedA;
+        });
+        return list;
+    }, [latestCompletedAttempts, resultsSortBy]);
     const reviewFlagCount = latestCompletedAttempts.filter(
         (attempt) => attempt?.needs_review || (Array.isArray(attempt?.sanity_flags) && attempt.sanity_flags.length > 0)
     ).length;
@@ -3475,13 +3587,13 @@ const StudentResultsView = ({ selfOnly = false }) => {
 
     // Export to CSV
     const exportToCSV = () => {
-        if (latestCompletedAttempts.length === 0) {
+        if (sortedLatestCompletedAttempts.length === 0) {
             error('No data to export');
             return;
         }
 
         const headers = ['Student Name', 'Email', 'Quiz', 'Score', 'Total Marks', 'Percentage', 'Grade', 'Correct Answers', 'Total Questions', 'Time Taken', 'Submitted At', 'Status'];
-        const csvData = latestCompletedAttempts.map((attempt) => {
+        const csvData = sortedLatestCompletedAttempts.map((attempt) => {
             const percentage = toSafeNumber(attempt?.percentage, 0);
             const score = toSafeNumber(attempt?.score, 0);
             const grade = getGradeFromPercentage(percentage);
@@ -3530,7 +3642,7 @@ const StudentResultsView = ({ selfOnly = false }) => {
                     </button>
                     <button
                         onClick={exportToCSV}
-                        disabled={latestCompletedAttempts.length === 0}
+                        disabled={sortedLatestCompletedAttempts.length === 0}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                     >
                         <Download size={20} />
@@ -3652,6 +3764,22 @@ const StudentResultsView = ({ selfOnly = false }) => {
                     </div>
                 </div>
 
+                <div className="mb-3 max-w-sm">
+                    <label className="block text-xs font-medium text-red-800 mb-1">Sort Live Rows</label>
+                    <select
+                        value={liveSortBy}
+                        onChange={(e) => setLiveSortBy(e.target.value)}
+                        className="w-full px-3 py-2 border border-red-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-red-300 focus:border-red-300"
+                    >
+                        <option value="score_desc">Live Score High-Low</option>
+                        <option value="score_asc">Live Score Low-High</option>
+                        <option value="elapsed_desc">Elapsed High-Low</option>
+                        <option value="elapsed_asc">Elapsed Low-High</option>
+                        <option value="name_asc">Student Name A-Z</option>
+                        <option value="name_desc">Student Name Z-A</option>
+                    </select>
+                </div>
+
                 {focusedLiveAttempts.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -3748,6 +3876,24 @@ const StudentResultsView = ({ selfOnly = false }) => {
                 </div>
             </div>
 
+            <div className="mb-4 max-w-sm">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort Completed Results</label>
+                <select
+                    value={resultsSortBy}
+                    onChange={(e) => setResultsSortBy(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                    <option value="submitted_desc">Submitted Newest First</option>
+                    <option value="submitted_asc">Submitted Oldest First</option>
+                    <option value="percentage_desc">Percentage High-Low</option>
+                    <option value="percentage_asc">Percentage Low-High</option>
+                    <option value="score_desc">Score High-Low</option>
+                    <option value="score_asc">Score Low-High</option>
+                    <option value="student_asc">Student Name A-Z</option>
+                    <option value="student_desc">Student Name Z-A</option>
+                </select>
+            </div>
+
             {!selfOnly && reviewFlagCount > 0 && (
                 <div className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     {reviewFlagCount} completed attempt(s) flagged for review due to scoring/time sanity checks.
@@ -3778,7 +3924,7 @@ const StudentResultsView = ({ selfOnly = false }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                                    {latestCompletedAttempts.map((attempt) => {
+                                    {sortedLatestCompletedAttempts.map((attempt) => {
                                 const percentage = toSafeNumber(attempt?.percentage, 0);
                                 const score = toSafeNumber(attempt?.score, 0);
                                 const totalMarks = toSafeNumber(attempt?.quiz_total_marks ?? attempt?.total_marks, 0);
