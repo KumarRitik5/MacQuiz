@@ -1663,7 +1663,8 @@ const DetailedReportsTool = () => {
     const [classYear, setClassYear] = useState('All');
     const [department, setDepartment] = useState('All');
     const [semester, setSemester] = useState('All');
-    const [reportOutput, setReportOutput] = useState(null);
+    const [selectedQuizId, setSelectedQuizId] = useState('all');
+    const [aiInsights, setAiInsights] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [allUsers, setAllUsers] = useState([]);
@@ -1757,104 +1758,33 @@ const DetailedReportsTool = () => {
     // Function to analyze report and generate insights
     const analyzeReport = async () => {
         setIsGenerating(true);
-        setReportOutput(null);
+        setAiInsights(null);
 
         // Generate report data from actual system data
         const data = generateReportData();
         setReportData(data);
 
-        // Simulate analysis delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+            const payload = {
+                include_recommendations: true,
+            };
 
-        // Generate AI-style insights based on real data
-        const insights = [];
-        
-        // Insight 1: Student Engagement
-        if (data.completionRate < 50) {
-            insights.push(`**🎯 Low Engagement Alert:** Only ${data.completionRate}% quiz completion rate detected for **${classYear === 'All' ? 'all students' : classYear}** ${department !== 'All' ? `in ${department}` : ''}. Consider implementing mandatory quiz policies or increasing grade weightage to improve participation.`);
-        } else if (data.completionRate > 80) {
-            insights.push(`**✨ Excellent Engagement:** ${data.completionRate}% completion rate shows strong student participation. Maintain current assessment strategies and consider expanding quiz offerings.`);
-        } else {
-            insights.push(`**📊 Moderate Engagement:** ${data.completionRate}% completion rate is acceptable but has room for improvement. Consider adding incentives or reducing quiz difficulty to boost participation.`);
-        }
-
-        // Insight 2: Teacher Activity
-        if (data.inactiveTeachers > 0) {
-            insights.push(`**⚠️ Faculty Engagement Gap:** ${data.inactiveTeachers} out of ${data.totalTeachers} teachers have not created any quizzes. Schedule training sessions or provide quiz templates to encourage quiz creation.`);
-        } else {
-            insights.push(`**👏 Full Faculty Participation:** All ${data.totalTeachers} teachers are actively creating assessments. Excellent team engagement!`);
-        }
-
-        // Insight 3: Quiz Availability
-        if (data.activeQuizzes === 0) {
-            insights.push(`**🚨 No Active Quizzes:** There are currently no active quizzes available to students. Activate existing quizzes or create new assessments to maintain continuous learning.`);
-        } else if (data.activeQuizzes < 3) {
-            insights.push(`**📚 Limited Assessment Options:** Only ${data.activeQuizzes} active quiz(es) available. Consider creating more diverse assessments to cover different topics and difficulty levels.`);
-        } else {
-            insights.push(`**✅ Healthy Assessment Pipeline:** ${data.activeQuizzes} active quizzes provide good variety. Ensure they cover all key topics and difficulty levels.`);
-        }
-
-        // Insight 4: Student Base
-        if (data.totalStudents === 0) {
-            insights.push(`**👥 No Students Found:** No students match the selected filters. Adjust your filter criteria or ensure students are properly registered in the system.`);
-        } else if (data.totalStudents < 10) {
-            insights.push(`**📈 Small Cohort:** ${data.totalStudents} students in this segment. Consider personalized attention and targeted interventions for maximum impact.`);
-        } else {
-            insights.push(`**👨‍🎓 Student Base:** ${data.totalStudents} students in selected cohort. This sample size allows for meaningful statistical analysis and trend identification.`);
-        }
-
-        const analysis = `### 📊 Analytical Insights for ${classYear} / ${department} / ${semester}\n\n${insights.map((i, idx) => `${idx + 1}. ${i}`).join('\n\n')}\n\n---\n**📌 Summary Statistics:**\n- Total Students: ${data.totalStudents}\n- Total Quizzes: ${data.totalQuizzes} (${data.activeQuizzes} active)\n- Total Attempts: ${data.totalAttempts}\n- Completion Rate: ${data.completionRate}%\n- Active Teachers: ${data.activeTeachers}/${data.totalTeachers}`;
-
-        setReportOutput(analysis);
-        setIsGenerating(false);
-
-        /* Uncomment this section when you have a Gemini API key:
-        
-        const apiKey = "YOUR_GEMINI_API_KEY_HERE";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-        const maxRetries = 3;
-        
-        const payload = {
-            contents: [{
-                parts: [{
-                    text: `You are a world-class Educational Data Analyst. Analyze the provided report findings and generate exactly four concise, actionable recommendations for the administrative team to improve student performance and system engagement. Use simple bullet points.\n\nData: ${mockData}`
-                }]
-            }]
-        };
-
-        let result = null;
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                result = await response.json();
-                break; // Exit loop on success
-            } catch (error) {
-                if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
-                } else {
-                    setReportOutput("Error: Could not fetch analysis from Gemini API.");
-                    setIsGenerating(false);
-                    return;
-                }
+            if (department !== 'All') {
+                payload.department = department;
             }
-        }
 
-        if (result && result.candidates?.[0]?.content?.parts?.[0]?.text) {
-            setReportOutput(result.candidates[0].content.parts[0].text);
-        } else {
-            setReportOutput("Analysis failed or returned empty content.");
+            if (selectedQuizId !== 'all') {
+                payload.quiz_id = Number(selectedQuizId);
+            }
+
+            const response = await analyticsAPI.getAIInsights(payload);
+            setAiInsights(response);
+        } catch (err) {
+            console.error('Failed to generate AI insights:', err);
+            error(err?.data?.detail || err?.message || 'Failed to generate AI insights');
+        } finally {
+            setIsGenerating(false);
         }
-        setIsGenerating(false);
-        */
     };
 
     return (
@@ -1865,7 +1795,7 @@ const DetailedReportsTool = () => {
             </p>
 
             {/* Input Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded-xl border">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Class/Year</label>
                     <select value={classYear} onChange={(e) => setClassYear(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-600 focus:border-blue-600">
@@ -1883,6 +1813,17 @@ const DetailedReportsTool = () => {
                     <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-600 focus:border-blue-600">
                         {/* UPDATED: Dynamic semester options based on classYear */}
                         {availableSemesters.map(sem => (<option key={sem}>{sem}</option>))}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quiz Scope</label>
+                    <select value={selectedQuizId} onChange={(e) => setSelectedQuizId(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-600 focus:border-blue-600">
+                        <option value="all">All Quizzes</option>
+                        {allQuizzes.map((quiz) => (
+                            <option key={quiz.id} value={String(quiz.id)}>
+                                {quiz.title || `Quiz ${quiz.id}`}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <div className="flex items-end">
@@ -1961,12 +1902,57 @@ const DetailedReportsTool = () => {
                 <h3 className="text-xl font-semibold text-gray-800 mb-4">Actionable Insights (Powered by AI)</h3>
 
                 {/* Reverted BG and border to light blue */}
-                <div className="bg-blue-50/50 p-6 rounded-xl border border-blue-200 min-h-[150px] flex items-center justify-center">
-                    {reportOutput ? (
-                        <div className="prose max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: reportOutput.replace(/\n/g, '<br>') }} />
+                <div className="bg-blue-50/50 p-6 rounded-xl border border-blue-200 min-h-[150px]">
+                    {aiInsights ? (
+                        <div className="space-y-4 text-gray-800">
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                                <span className="px-2 py-1 rounded-md bg-blue-100 text-blue-800">
+                                    Provider: {aiInsights.provider}
+                                </span>
+                                <span className="px-2 py-1 rounded-md bg-indigo-100 text-indigo-800">
+                                    Model: {aiInsights.model}
+                                </span>
+                                {aiInsights.fallback_used && (
+                                    <span className="px-2 py-1 rounded-md bg-amber-100 text-amber-800">
+                                        Fallback mode
+                                    </span>
+                                )}
+                            </div>
+
+                            <div>
+                                <h4 className="text-base font-bold text-gray-900 mb-1">Summary</h4>
+                                <p className="text-sm text-gray-700">{aiInsights.summary}</p>
+                            </div>
+
+                            <div>
+                                <h4 className="text-base font-bold text-gray-900 mb-2">Key Findings</h4>
+                                <ul className="space-y-2 text-sm text-gray-700">
+                                    {(aiInsights.key_findings || []).map((finding, idx) => (
+                                        <li key={`${finding}-${idx}`} className="flex items-start">
+                                            <span className="mr-2 text-blue-600">•</span>
+                                            <span>{finding}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            {(aiInsights.recommendations || []).length > 0 && (
+                                <div>
+                                    <h4 className="text-base font-bold text-gray-900 mb-2">Recommendations</h4>
+                                    <ul className="space-y-2 text-sm text-gray-700">
+                                        {aiInsights.recommendations.map((recommendation, idx) => (
+                                            <li key={`${recommendation}-${idx}`} className="flex items-start">
+                                                <span className="mr-2 text-green-600">•</span>
+                                                <span>{recommendation}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
                     ) : (
-                        <p className="text-gray-500 text-center">
-                            Use the filters and click 'Generate Insights' to get immediate analysis and recommendations.
+                        <p className="text-gray-500 text-center pt-10">
+                            Use the filters and click 'Generate Insights' to get live backend AI analysis.
                         </p>
                     )}
                 </div>

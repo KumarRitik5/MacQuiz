@@ -575,4 +575,8 @@ export const analyticsAPI = {
     },
     getSubjectPerformance: (subjectId) => fetchAPI(`/api/v1/analytics/performance/subject/${subjectId}`),
     getDepartmentPerformance: (department) => fetchAPI(`/api/v1/analytics/performance/department/${department}`),
+    getAIInsights: (payload = {}) => fetchAPI('/api/v1/analytics/reports/ai-insights', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    }),
 };

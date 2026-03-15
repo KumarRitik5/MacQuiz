@@ -3,15 +3,267 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 from datetime import datetime, timedelta
+import json
+import urllib.request
+import urllib.error
 from app.core.deps import get_db, get_current_user, require_role
+from app.core.config import settings
 from app.models.models import (
     User, Quiz, QuizAttempt, Question, QuestionBank, Subject, Answer
 )
 from app.schemas.schemas import (
-    DashboardStats, TeacherStats, StudentStats, UserActivityResponse
+    DashboardStats,
+    TeacherStats,
+    StudentStats,
+    UserActivityResponse,
+    AIInsightsRequest,
+    AIInsightsResponse,
 )
 
 router = APIRouter()
+
+
+def _build_ai_metrics(
+    db: Session,
+    request_payload: AIInsightsRequest,
+    current_user: User,
+) -> dict:
+    completed_attempts = db.query(QuizAttempt).join(
+        User, User.id == QuizAttempt.student_id
+    ).filter(
+        User.role == "student",
+        QuizAttempt.is_completed == True,
+    )
+
+    quiz_title = None
+    if request_payload.quiz_id is not None:
+        quiz = db.query(Quiz).filter(Quiz.id == request_payload.quiz_id).first()
+        if not quiz:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Quiz not found",
+            )
+        if current_user.role == "teacher" and quiz.creator_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view AI insights for this quiz",
+            )
+        quiz_title = quiz.title
+        completed_attempts = completed_attempts.filter(QuizAttempt.quiz_id == request_payload.quiz_id)
+    elif current_user.role == "teacher":
+        # Teachers can only generate global insights for their own quizzes.
+        teacher_quiz_ids = db.query(Quiz.id).filter(Quiz.creator_id == current_user.id).subquery()
+        completed_attempts = completed_attempts.filter(QuizAttempt.quiz_id.in_(teacher_quiz_ids))
+
+    if request_payload.department:
+        completed_attempts = completed_attempts.filter(User.department == request_payload.department)
+
+    total_completed = completed_attempts.count()
+    avg_percentage = completed_attempts.with_entities(func.avg(QuizAttempt.percentage)).scalar() or 0
+    avg_score = completed_attempts.with_entities(func.avg(QuizAttempt.score)).scalar() or 0
+    avg_total_marks = completed_attempts.with_entities(func.avg(QuizAttempt.total_marks)).scalar() or 0
+
+    pass_threshold = 40.0
+    pass_count = completed_attempts.filter(QuizAttempt.percentage >= pass_threshold).count()
+    pass_rate = (pass_count / total_completed * 100.0) if total_completed else 0.0
+
+    top_performers_rows = completed_attempts.join(
+        Quiz, Quiz.id == QuizAttempt.quiz_id
+    ).with_entities(
+        User.first_name,
+        User.last_name,
+        User.department,
+        Quiz.title,
+        QuizAttempt.percentage,
+    ).order_by(QuizAttempt.percentage.desc()).limit(3).all()
+
+    low_performers_rows = completed_attempts.join(
+        Quiz, Quiz.id == QuizAttempt.quiz_id
+    ).with_entities(
+        User.first_name,
+        User.last_name,
+        User.department,
+        Quiz.title,
+        QuizAttempt.percentage,
+    ).order_by(QuizAttempt.percentage.asc()).limit(3).all()
+
+    top_performers = [
+        {
+            "name": f"{row.first_name} {row.last_name}",
+            "department": row.department,
+            "quiz": row.title,
+            "percentage": round(float(row.percentage or 0), 2),
+        }
+        for row in top_performers_rows
+    ]
+
+    low_performers = [
+        {
+            "name": f"{row.first_name} {row.last_name}",
+            "department": row.department,
+            "quiz": row.title,
+            "percentage": round(float(row.percentage or 0), 2),
+        }
+        for row in low_performers_rows
+    ]
+
+    return {
+        "quiz_id": request_payload.quiz_id,
+        "quiz_title": quiz_title,
+        "department": request_payload.department,
+        "total_completed_attempts": total_completed,
+        "average_percentage": round(float(avg_percentage), 2) if total_completed else 0.0,
+        "average_score": round(float(avg_score), 2) if total_completed else 0.0,
+        "average_total_marks": round(float(avg_total_marks), 2) if total_completed else 0.0,
+        "pass_threshold": pass_threshold,
+        "pass_rate": round(float(pass_rate), 2),
+        "top_performers": top_performers,
+        "low_performers": low_performers,
+    }
+
+
+def _fallback_ai_summary(metrics: dict, include_recommendations: bool) -> dict:
+    total = metrics.get("total_completed_attempts", 0)
+    avg_pct = metrics.get("average_percentage", 0.0)
+    pass_rate = metrics.get("pass_rate", 0.0)
+
+    if total == 0:
+        summary = "No completed attempts were found for the selected filters, so there is not enough data for AI analysis yet."
+        findings = [
+            "No completed attempts available.",
+            "Run at least one completed assessment to generate insights.",
+        ]
+        recommendations = [
+            "Assign this quiz to students and collect attempts.",
+            "Re-run AI insights after at least 10 completed attempts for better reliability.",
+        ] if include_recommendations else []
+        return {
+            "summary": summary,
+            "key_findings": findings,
+            "recommendations": recommendations,
+        }
+
+    performance_band = "strong" if avg_pct >= 70 else ("moderate" if avg_pct >= 40 else "weak")
+    summary = (
+        f"The cohort shows {performance_band} performance with an average score of {avg_pct:.1f}% "
+        f"and a pass rate of {pass_rate:.1f}% across {total} completed attempt(s)."
+    )
+
+    findings = [
+        f"Average percentage: {avg_pct:.1f}%",
+        f"Pass rate: {pass_rate:.1f}% (threshold {metrics.get('pass_threshold', 40):.0f}%)",
+        f"Sample size: {total} completed attempt(s)",
+    ]
+
+    recommendations = []
+    if include_recommendations:
+        if avg_pct < 40:
+            recommendations.extend([
+                "Review foundational concepts before the next assessment.",
+                "Introduce 1-2 low-stakes practice quizzes focused on weak areas.",
+            ])
+        elif avg_pct < 70:
+            recommendations.extend([
+                "Target medium-difficulty questions where partial understanding exists.",
+                "Use feedback sessions for the three most-missed topics.",
+            ])
+        else:
+            recommendations.extend([
+                "Increase challenge level with more application-based questions.",
+                "Use top performers to mentor students in lower bands.",
+            ])
+
+    return {
+        "summary": summary,
+        "key_findings": findings,
+        "recommendations": recommendations,
+    }
+
+
+def _extract_json_object(raw_text: str) -> Optional[dict]:
+    if not raw_text:
+        return None
+    raw_text = raw_text.strip()
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError:
+        pass
+
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return json.loads(raw_text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def _generate_with_gemini(metrics: dict, include_recommendations: bool) -> Optional[dict]:
+    api_key = (settings.GEMINI_API_KEY or "").strip()
+    if not settings.AI_ENABLED or not api_key:
+        return None
+
+    prompt = (
+        "You are an educational analytics assistant. "
+        "Given metrics, produce concise actionable insights. "
+        "Return strictly JSON with keys: summary (string), key_findings (array of strings), "
+        "recommendations (array of strings).\n\n"
+        f"Include recommendations: {str(include_recommendations).lower()}\n"
+        f"Metrics: {json.dumps(metrics, ensure_ascii=True)}"
+    )
+
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent"
+        f"?key={api_key}"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 500,
+            "responseMimeType": "application/json",
+        },
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            body = response.read().decode("utf-8")
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+        return None
+
+    try:
+        parsed = json.loads(body)
+        text = parsed["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+        return None
+
+    output = _extract_json_object(text)
+    if not output:
+        return None
+
+    summary = str(output.get("summary") or "").strip()
+    key_findings = [str(item).strip() for item in (output.get("key_findings") or []) if str(item).strip()]
+    recommendations = [str(item).strip() for item in (output.get("recommendations") or []) if str(item).strip()]
+
+    if not summary or not key_findings:
+        return None
+
+    if not include_recommendations:
+        recommendations = []
+
+    return {
+        "summary": summary,
+        "key_findings": key_findings,
+        "recommendations": recommendations,
+    }
 
 @router.get("/dashboard", response_model=DashboardStats)
 def get_dashboard_stats(
@@ -421,4 +673,29 @@ def get_department_performance(
         "total_attempts": total_attempts,
         "completed_attempts": completed_attempts,
         "average_performance": round(avg_performance, 2)
+    }
+
+
+@router.post("/reports/ai-insights", response_model=AIInsightsResponse)
+def get_ai_insights(
+    request_payload: AIInsightsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin", "teacher"])),
+):
+    metrics = _build_ai_metrics(db, request_payload, current_user)
+
+    ai_output = _generate_with_gemini(metrics, request_payload.include_recommendations)
+    fallback_used = ai_output is None
+    if fallback_used:
+        ai_output = _fallback_ai_summary(metrics, request_payload.include_recommendations)
+
+    return {
+        "provider": "gemini" if not fallback_used else "rule-based",
+        "model": settings.GEMINI_MODEL if not fallback_used else "deterministic-v1",
+        "generated_at": datetime.utcnow(),
+        "summary": ai_output["summary"],
+        "key_findings": ai_output["key_findings"],
+        "recommendations": ai_output["recommendations"],
+        "fallback_used": fallback_used,
+        "source_metrics": metrics,
     }

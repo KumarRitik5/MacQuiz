@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # User Schemas
@@ -359,6 +359,23 @@ class PerformanceAnalytics(BaseModel):
     time_based_trends: List[dict]
     top_performers: List[dict]
     struggling_students: List[dict]
+
+
+class AIInsightsRequest(BaseModel):
+    quiz_id: Optional[int] = None
+    department: Optional[str] = None
+    include_recommendations: bool = True
+
+
+class AIInsightsResponse(BaseModel):
+    provider: str
+    model: str
+    generated_at: datetime
+    summary: str
+    key_findings: List[str]
+    recommendations: List[str]
+    fallback_used: bool
+    source_metrics: Dict[str, Any]
 
 # Bulk Operations
 class BulkUserCreate(BaseModel):

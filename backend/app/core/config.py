@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     CORS_ALLOW_CREDENTIALS: bool = True
     ADMIN_EMAIL: str = "admin@macquiz.com"
     ADMIN_PASSWORD: str = "admin123"
+    AI_ENABLED: bool = True
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"
     
     @property
     def cors_origins_list(self) -> List[str]:

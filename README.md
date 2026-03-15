@@ -181,6 +181,9 @@ npm run dev
 - `GET /api/v1/attempts/stats/dashboard` - Dashboard stats (Admin)
 - `GET /api/v1/attempts/stats/activity` - Recent activity (Admin)
 
+### AI Reports
+- `POST /api/v1/analytics/reports/ai-insights` - Generate AI-based insights (Gemini if configured, safe fallback otherwise)
+
 See [backend/API_EXAMPLES.md](backend/API_EXAMPLES.md) for detailed API usage examples.
 
 ## Database Schema
