@@ -4024,6 +4024,95 @@ const StudentResultsView = ({ selfOnly = false }) => {
     );
 };
 
+const ExtendedProfileView = ({ user, profileImage, onPickProfileImage, onRemoveProfileImage }) => {
+    const identityValue = user ? getDisplayUserId(user) : 'Not assigned';
+    const identityLabel = user?.role === 'student'
+        ? 'Student ID'
+        : user?.role === 'teacher'
+            ? 'Teacher ID'
+            : 'Admin Account';
+
+    const joinDate = user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-lg border border-gray-100">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">My Profile</h2>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-4xl shadow-lg ring-4 ring-blue-100">
+                        {profileImage ? (
+                            <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U'
+                        )}
+                    </div>
+
+                    <div className="min-w-0">
+                        <p className="text-xl sm:text-2xl font-semibold text-gray-900 break-words">{user?.first_name} {user?.last_name}</p>
+                        <p className="text-sm text-gray-500 break-all">{user?.email}</p>
+                        <p className="text-xs text-gray-500 mt-1 capitalize">Role: {user?.role || 'user'}</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                        <button
+                            onClick={onPickProfileImage}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                        >
+                            {profileImage ? 'Change Image' : 'Upload Image'}
+                        </button>
+                        {profileImage && (
+                            <button
+                                onClick={onRemoveProfileImage}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-semibold"
+                            >
+                                Remove
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-lg border border-gray-100">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Extended Profile View</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Full Name</p>
+                        <p className="font-semibold text-gray-900 break-words">{user?.first_name} {user?.last_name}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Email</p>
+                        <p className="font-semibold text-gray-900 break-all">{user?.email || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">{identityLabel}</p>
+                        <p className="font-semibold text-gray-900 break-words">{identityValue}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Department</p>
+                        <p className="font-semibold text-gray-900">{user?.department || 'N/A'}</p>
+                    </div>
+                    {user?.role === 'student' && (
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Class / Year</p>
+                            <p className="font-semibold text-gray-900">{user?.class_year || 'N/A'}</p>
+                        </div>
+                    )}
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Account Status</p>
+                        <p className={`font-semibold ${user?.is_active ? 'text-green-700' : 'text-red-700'}`}>
+                            {user?.is_active ? 'Active' : 'Inactive'}
+                        </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Joined</p>
+                        <p className="font-semibold text-gray-900">{joinDate}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const StudentUnifiedView = ({ activeTab, user, profileImage, onPickProfileImage, onRemoveProfileImage }) => {
     const navigate = useNavigate();
     const { error } = useToast();
@@ -4252,6 +4341,42 @@ export default function AdminDashboard() {
         profileImageInputRef.current?.click();
     };
 
+    const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image'));
+        reader.readAsDataURL(file);
+    });
+
+    const compressImageToDataUrl = (file, maxSide = 800, quality = 0.82) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const width = img.width || 1;
+                const height = img.height || 1;
+                const scale = Math.min(1, maxSide / Math.max(width, height));
+                canvas.width = Math.max(1, Math.round(width * scale));
+                canvas.height = Math.max(1, Math.round(height * scale));
+
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    reject(new Error('Image processing is unavailable in this browser'));
+                    return;
+                }
+
+                context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const optimized = canvas.toDataURL('image/jpeg', quality);
+                resolve(optimized);
+            };
+            img.onerror = () => reject(new Error('Failed to process image'));
+            img.src = String(reader.result || '');
+        };
+        reader.onerror = () => reject(new Error('Failed to read image'));
+        reader.readAsDataURL(file);
+    });
+
     const handleProfileImageSelected = async (event) => {
         const file = event.target?.files?.[0];
         if (!file) return;
@@ -4262,27 +4387,38 @@ export default function AdminDashboard() {
             return;
         }
 
-        // Keep localStorage usage bounded.
-        if (file.size > 2 * 1024 * 1024) {
-            error('Image is too large. Please select an image smaller than 2 MB.');
+        // Keep upload/payload bounded for API and mobile networks.
+        if (file.size > 6 * 1024 * 1024) {
+            error('Image is too large. Please select an image smaller than 6 MB.');
             return;
         }
 
         try {
-            const dataUrl = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(new Error('Failed to read image'));
-                reader.readAsDataURL(file);
-            });
+            let dataUrl = await compressImageToDataUrl(file, 800, 0.82);
+
+            // Backend currently rejects very large base64 payloads; reduce quality once more if needed.
+            if (dataUrl.length > 2_800_000) {
+                dataUrl = await compressImageToDataUrl(file, 640, 0.72);
+            }
+
+            // Fallback path in case compression unexpectedly fails to reduce enough.
+            if (dataUrl.length > 2_900_000) {
+                dataUrl = await fileToDataUrl(file);
+            }
+
+            if (dataUrl.length > 2_950_000) {
+                error('Image is still too large after optimization. Please choose a smaller image.');
+                return;
+            }
 
             await userAPI.updateCurrentUser({ profile_image: dataUrl });
             setProfileImage(dataUrl);
             await checkAuth();
             setIsProfileMenuOpen(false);
             success('Profile image updated successfully.');
-        } catch (_err) {
-            error('Failed to update profile image.');
+        } catch (errObj) {
+            const detail = errObj?.data?.detail || errObj?.message || 'Failed to update profile image.';
+            error(`Failed to update profile image: ${detail}`);
         } finally {
             // Allow selecting the same file again.
             if (event.target) {
@@ -4299,8 +4435,9 @@ export default function AdminDashboard() {
                 setIsProfileMenuOpen(false);
                 success('Profile image removed.');
             })
-            .catch(() => {
-                error('Failed to remove profile image.');
+            .catch((errObj) => {
+                const detail = errObj?.data?.detail || errObj?.message || 'Failed to remove profile image.';
+                error(`Failed to remove profile image: ${detail}`);
             });
     };
 
@@ -4574,6 +4711,7 @@ export default function AdminDashboard() {
         { name: "Quizzes", icon: FileText, title: "My Quizzes" },
         { name: "Students", icon: Users, title: "My Students" },
         { name: "Student Results", icon: Trophy, title: "Student Results" },
+        { name: "Profile", icon: UserCheck, title: "Profile" },
         { name: "SDC Team", icon: Code2, title: "SDC Team" },
         { name: "Settings", icon: Settings, title: "Settings" },
     ] : user?.role === 'student' ? [
@@ -4590,15 +4728,16 @@ export default function AdminDashboard() {
         { name: "Quizzes", icon: FileText, title: "Quiz Management" },
         { name: "Student Results", icon: Trophy, title: "Student Results" },
         { name: "Detailed Reports", icon: BarChart3, title: "Detailed Reports" },
+        { name: "Profile", icon: UserCheck, title: "Profile" },
         { name: "SDC Team", icon: Code2, title: "SDC Team" },
         { name: "Settings", icon: Settings, title: "Settings" },
     ];
 
     useEffect(() => {
         const allowedTabsByRole = {
-            teacher: ["Dashboard", "Quizzes", "Students", "Student Results", "SDC Team", "Settings"],
+            teacher: ["Dashboard", "Quizzes", "Students", "Student Results", "Profile", "SDC Team", "Settings"],
             student: ["Dashboard", "My Quizzes", "My Progress", "Profile", "SDC Team"],
-            admin: ["Dashboard", "Users", "Teachers", "Students", "Quizzes", "Student Results", "Detailed Reports", "SDC Team", "Settings"],
+            admin: ["Dashboard", "Users", "Teachers", "Students", "Quizzes", "Student Results", "Detailed Reports", "Profile", "SDC Team", "Settings"],
         };
 
         const role = user?.role || 'student';
@@ -4715,9 +4854,7 @@ export default function AdminDashboard() {
                     ? <StudentUnifiedView activeTab="My Progress" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />
                     : <Placeholder content="Page Not Found" />;
             case 'Profile':
-                return user?.role === 'student'
-                    ? <StudentUnifiedView activeTab="Profile" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />
-                    : <Placeholder content="Page Not Found" />;
+                return <ExtendedProfileView user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />;
             case 'Student Results':
                 if (user?.role === 'student') {
                     return <Placeholder content="Page Not Found" />;
@@ -4821,7 +4958,9 @@ export default function AdminDashboard() {
                         <p className="text-gray-500 mt-1">
                             {activeTab === 'Dashboard'
                                 ? (user?.role === 'student' ? "Your quizzes and progress overview." : "System overview and quick access actions.")
-                                : "Detailed views and management tools."}
+                                : activeTab === 'Profile'
+                                    ? "View and manage your account details and profile image."
+                                    : "Detailed views and management tools."}
                         </p>
                     </div>
 
@@ -4865,22 +5004,6 @@ export default function AdminDashboard() {
                                         <Users size={16} className="mr-2" />
                                         View Profile
                                     </button>
-                                    <button
-                                        onClick={triggerProfileImagePicker}
-                                        className="w-full flex items-center px-4 py-3 text-blue-700 hover:bg-blue-50 transition text-sm font-medium"
-                                    >
-                                        <Upload size={16} className="mr-2" />
-                                        {profileImage ? 'Change Profile Image' : 'Add Profile Image'}
-                                    </button>
-                                    {profileImage && (
-                                        <button
-                                            onClick={removeProfileImage}
-                                            className="w-full flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition text-sm font-medium"
-                                        >
-                                            <X size={16} className="mr-2" />
-                                            Remove Profile Image
-                                        </button>
-                                    )}
                                     <button
                                         onClick={() => {
                                             setIsProfileMenuOpen(false);
