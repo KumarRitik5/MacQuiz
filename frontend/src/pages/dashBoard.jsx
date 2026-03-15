@@ -4032,8 +4032,6 @@ const ExtendedProfileView = ({ user, profileImage, onPickProfileImage, onRemoveP
             ? 'Teacher ID'
             : 'Admin Account';
 
-    const joinDate = user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
-
     return (
         <div className="space-y-6">
             <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-lg border border-gray-100">
@@ -4102,10 +4100,6 @@ const ExtendedProfileView = ({ user, profileImage, onPickProfileImage, onRemoveP
                         <p className={`font-semibold ${user?.is_active ? 'text-green-700' : 'text-red-700'}`}>
                             {user?.is_active ? 'Active' : 'Inactive'}
                         </p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        <p className="text-xs text-gray-500 mb-1">Joined</p>
-                        <p className="font-semibold text-gray-900">{joinDate}</p>
                     </div>
                 </div>
             </div>
@@ -4950,8 +4944,8 @@ export default function AdminDashboard() {
                     onChange={handleProfileImageSelected}
                 />
                 {/* Header/Title with Profile Avatar */}
-                <header className="mb-4 sm:mb-6 md:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
+                <header className="mb-4 sm:mb-6 md:mb-8 flex flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+                    <div className="min-w-0 flex-1">
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">
                             {getCurrentTitle()}
                         </h1>
@@ -4965,11 +4959,11 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Profile Dropdown - Available on mobile and desktop */}
-                    <div className="flex items-start self-end sm:self-auto" ref={profileMenuRef}>
+                    <div className="flex items-start self-auto shrink-0" ref={profileMenuRef}>
                         <div className="relative">
                             <button
                                 onClick={() => setIsProfileMenuOpen(prev => !prev)}
-                                className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 rounded-xl hover:bg-gray-100 transition duration-150 border border-gray-200"
+                                className="flex items-center gap-2 sm:gap-3 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-gray-100 transition duration-150 border border-gray-200"
                             >
                                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-md">
                                     {profileImage ? (
