@@ -93,6 +93,8 @@ const getDisplayUserId = (user) => {
     return `ADM-${user.id ?? 'N/A'}`;
 };
 
+const getProfileImageStorageKey = (userId) => `macquiz_profile_image_${userId}`;
+
 
 /**
  * --- UTILITY COMPONENTS ---
@@ -4011,7 +4013,7 @@ const StudentResultsView = ({ selfOnly = false }) => {
     );
 };
 
-const StudentUnifiedView = ({ activeTab, user }) => {
+const StudentUnifiedView = ({ activeTab, user, profileImage, onPickProfileImage, onRemoveProfileImage }) => {
     const navigate = useNavigate();
     const { error } = useToast();
     const [quizzes, setQuizzes] = useState([]);
@@ -4071,6 +4073,31 @@ const StudentUnifiedView = ({ activeTab, user }) => {
         return (
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">My Profile</h2>
+                <div className="mb-6 flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-2xl">
+                        {profileImage ? (
+                            <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U'
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={onPickProfileImage}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                        >
+                            Upload Image
+                        </button>
+                        {profileImage && (
+                            <button
+                                onClick={onRemoveProfileImage}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-semibold"
+                            >
+                                Remove
+                            </button>
+                        )}
+                    </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
                     <div><span className="text-gray-500">Name:</span> {user?.first_name} {user?.last_name}</div>
                     <div><span className="text-gray-500">Email:</span> {user?.email}</div>
@@ -4198,7 +4225,69 @@ export default function AdminDashboard() {
     const [statsData, setStatsData] = useState(null);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef(null);
+    const profileImageInputRef = useRef(null);
+    const [profileImage, setProfileImage] = useState('');
     const hasMountedRef = useRef(false);
+
+    useEffect(() => {
+        if (!user?.id) {
+            setProfileImage('');
+            return;
+        }
+        const savedImage = localStorage.getItem(getProfileImageStorageKey(user.id)) || '';
+        setProfileImage(savedImage);
+    }, [user?.id]);
+
+    const triggerProfileImagePicker = () => {
+        profileImageInputRef.current?.click();
+    };
+
+    const handleProfileImageSelected = async (event) => {
+        const file = event.target?.files?.[0];
+        if (!file) return;
+
+        const isImage = file.type?.startsWith('image/');
+        if (!isImage) {
+            alert('Please select an image file.');
+            return;
+        }
+
+        // Keep localStorage usage bounded.
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Image is too large. Please select an image smaller than 2 MB.');
+            return;
+        }
+
+        try {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Failed to read image'));
+                reader.readAsDataURL(file);
+            });
+
+            if (user?.id) {
+                localStorage.setItem(getProfileImageStorageKey(user.id), dataUrl);
+            }
+            setProfileImage(dataUrl);
+            setIsProfileMenuOpen(false);
+        } catch (_err) {
+            alert('Failed to load selected image.');
+        } finally {
+            // Allow selecting the same file again.
+            if (event.target) {
+                event.target.value = '';
+            }
+        }
+    };
+
+    const removeProfileImage = () => {
+        if (user?.id) {
+            localStorage.removeItem(getProfileImageStorageKey(user.id));
+        }
+        setProfileImage('');
+        setIsProfileMenuOpen(false);
+    };
 
     const fetchDashboardStats = useCallback(async () => {
         setStatsLoading(true);
@@ -4524,7 +4613,7 @@ export default function AdminDashboard() {
         switch (activeTab) {
             case 'Dashboard': { // Added braces to fix no-case-declarations
                 if (user?.role === 'student') {
-                    return <StudentUnifiedView activeTab="Dashboard" user={user} />;
+                    return <StudentUnifiedView activeTab="Dashboard" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />;
                 }
                 return (
                     <div className="space-y-8">
@@ -4604,15 +4693,15 @@ export default function AdminDashboard() {
                     );
             case 'My Quizzes':
                 return user?.role === 'student'
-                    ? <StudentUnifiedView activeTab="My Quizzes" user={user} />
+                    ? <StudentUnifiedView activeTab="My Quizzes" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />
                     : <Placeholder content="Page Not Found" />;
             case 'My Progress':
                 return user?.role === 'student'
-                    ? <StudentUnifiedView activeTab="My Progress" user={user} />
+                    ? <StudentUnifiedView activeTab="My Progress" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />
                     : <Placeholder content="Page Not Found" />;
             case 'Profile':
                 return user?.role === 'student'
-                    ? <StudentUnifiedView activeTab="Profile" user={user} />
+                    ? <StudentUnifiedView activeTab="Profile" user={user} profileImage={profileImage} onPickProfileImage={triggerProfileImagePicker} onRemoveProfileImage={removeProfileImage} />
                     : <Placeholder content="Page Not Found" />;
             case 'Student Results':
                 if (user?.role === 'student') {
@@ -4701,6 +4790,13 @@ export default function AdminDashboard() {
 
             {/* Main Content Area */}
             <main className="flex-1 lg:ml-64 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8 w-full overflow-x-hidden">
+                <input
+                    ref={profileImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProfileImageSelected}
+                />
                 {/* Header/Title with Profile Avatar */}
                 <header className="mb-4 sm:mb-6 md:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
@@ -4721,8 +4817,12 @@ export default function AdminDashboard() {
                                 onClick={() => setIsProfileMenuOpen(prev => !prev)}
                                 className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 transition duration-150 border border-gray-200"
                             >
-                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-md">
-                                    {userInitials}
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-md">
+                                    {profileImage ? (
+                                        <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        userInitials
+                                    )}
                                 </div>
                                 <div className="text-right">
                                     <p className="text-xs sm:text-sm font-semibold text-gray-800">{roleLabel}</p>
@@ -4740,6 +4840,22 @@ export default function AdminDashboard() {
                                         <p className="text-sm font-semibold text-gray-900">{user?.first_name} {user?.last_name}</p>
                                         <p className="text-xs text-gray-500">{user?.email}</p>
                                     </div>
+                                    <button
+                                        onClick={triggerProfileImagePicker}
+                                        className="w-full flex items-center px-4 py-3 text-blue-700 hover:bg-blue-50 transition text-sm font-medium"
+                                    >
+                                        <Upload size={16} className="mr-2" />
+                                        {profileImage ? 'Change Profile Image' : 'Add Profile Image'}
+                                    </button>
+                                    {profileImage && (
+                                        <button
+                                            onClick={removeProfileImage}
+                                            className="w-full flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition text-sm font-medium"
+                                        >
+                                            <X size={16} className="mr-2" />
+                                            Remove Profile Image
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => {
                                             setIsProfileMenuOpen(false);
