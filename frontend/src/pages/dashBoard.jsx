@@ -4825,12 +4825,12 @@ export default function AdminDashboard() {
                         </p>
                     </div>
 
-                    {/* Profile Dropdown - Hidden on mobile, shown on desktop */}
-                    <div className="hidden sm:flex items-start" ref={profileMenuRef}>
+                    {/* Profile Dropdown - Available on mobile and desktop */}
+                    <div className="flex items-start self-end sm:self-auto" ref={profileMenuRef}>
                         <div className="relative">
                             <button
                                 onClick={() => setIsProfileMenuOpen(prev => !prev)}
-                                className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 transition duration-150 border border-gray-200"
+                                className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 rounded-xl hover:bg-gray-100 transition duration-150 border border-gray-200"
                             >
                                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-md">
                                     {profileImage ? (
@@ -4839,22 +4839,32 @@ export default function AdminDashboard() {
                                         userInitials
                                     )}
                                 </div>
-                                <div className="text-right">
+                                <div className="hidden md:block text-right">
                                     <p className="text-xs sm:text-sm font-semibold text-gray-800">{roleLabel}</p>
                                     <p className="text-xs text-gray-500">{identityLabel}: {identityValue}</p>
                                 </div>
                                 <ChevronDown
                                     size={16}
-                                    className={`text-gray-500 transition-transform duration-150 ${isProfileMenuOpen ? 'rotate-180' : ''}`}
+                                    className={`hidden sm:block text-gray-500 transition-transform duration-150 ${isProfileMenuOpen ? 'rotate-180' : ''}`}
                                 />
                             </button>
 
                             {isProfileMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden origin-top-right transform transition-all duration-200 ease-out opacity-100 scale-100 translate-y-0 animate-[fadeIn_0.18s_ease-out]">
+                                <div className="absolute right-0 mt-2 w-[92vw] max-w-xs sm:w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden origin-top-right transform transition-all duration-200 ease-out opacity-100 scale-100 translate-y-0 animate-[fadeIn_0.18s_ease-out]">
                                     <div className="px-4 py-3 border-b bg-gray-50">
                                         <p className="text-sm font-semibold text-gray-900">{user?.first_name} {user?.last_name}</p>
                                         <p className="text-xs text-gray-500">{user?.email}</p>
                                     </div>
+                                    <button
+                                        onClick={() => {
+                                            setIsProfileMenuOpen(false);
+                                            setActiveTab('Profile');
+                                        }}
+                                        className="w-full flex items-center px-4 py-3 text-gray-800 hover:bg-gray-50 transition text-sm font-medium"
+                                    >
+                                        <Users size={16} className="mr-2" />
+                                        View Profile
+                                    </button>
                                     <button
                                         onClick={triggerProfileImagePicker}
                                         className="w-full flex items-center px-4 py-3 text-blue-700 hover:bg-blue-50 transition text-sm font-medium"
