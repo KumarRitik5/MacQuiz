@@ -392,3 +392,37 @@ class QuestionFilter(BaseModel):
     difficulty: Optional[str] = None
     topic: Optional[str] = None
     question_type: Optional[str] = None
+
+
+class AIQuestionGenerateRequest(BaseModel):
+    topic: str = Field(min_length=2, max_length=200)
+    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
+    question_type: str = Field(default="mcq", pattern="^(mcq|true_false|short_answer)$")
+    count: int = Field(default=1, ge=1, le=20)
+    marks: float = Field(default=1.0, ge=0.25, le=100)
+    subject_id: Optional[int] = None
+    save_to_bank: bool = False
+
+
+class AIGeneratedQuestion(BaseModel):
+    question_text: str
+    question_type: str
+    option_a: Optional[str] = None
+    option_b: Optional[str] = None
+    option_c: Optional[str] = None
+    option_d: Optional[str] = None
+    correct_answer: str
+    topic: Optional[str] = None
+    difficulty: str
+    marks: float
+    saved_to_bank: bool = False
+    question_bank_id: Optional[int] = None
+
+
+class AIQuestionGenerateResponse(BaseModel):
+    provider: str
+    model: str
+    generated_at: datetime
+    fallback_used: bool
+    saved_count: int
+    questions: List[AIGeneratedQuestion]

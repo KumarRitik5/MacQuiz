@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
-import { quizAPI } from '../services/api';
+import { quizAPI, questionBankAPI, subjectAPI } from '../services/api';
 import {
     Plus, X, Save, Trash2, Copy, ChevronUp, ChevronDown,
-    FileText, Clock, Award, AlertCircle, CheckCircle
+    FileText, Clock, Award, AlertCircle, CheckCircle, Sparkles
 } from 'lucide-react';
 
 const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
@@ -41,6 +41,17 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
     const [showQuestionForm, setShowQuestionForm] = useState(false);
     const [editingIndex, setEditingIndex] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [subjects, setSubjects] = useState([]);
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiGeneration, setAiGeneration] = useState({
+        topic: '',
+        difficulty: 'medium',
+        question_type: 'mcq',
+        count: 1,
+        marks: 1,
+        subject_id: '',
+        save_to_bank: false,
+    });
 
     const loadQuizData = useCallback(async () => {
         setIsLoading(true);
@@ -73,6 +84,18 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
         }
     }, [isEditMode, loadQuizData]);
 
+    useEffect(() => {
+        const loadSubjects = async () => {
+            try {
+                const data = await subjectAPI.getAllSubjects(true);
+                setSubjects(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load subjects:', err);
+            }
+        };
+        loadSubjects();
+    }, []);
+
     const departments = [
         'Computer Science Engg.',
         'Artificial Intelligence',
@@ -92,6 +115,86 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
     const handleQuestionChange = (e) => {
         const { name, value } = e.target;
         setCurrentQuestion({ ...currentQuestion, [name]: value });
+    };
+
+    const handleAIChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setAiGeneration((prev) => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value,
+        }));
+    };
+
+    const handleGenerateWithAI = async () => {
+        const topic = aiGeneration.topic.trim();
+        if (!topic) {
+            error('Please enter a topic for AI question generation.');
+            return;
+        }
+
+        if (aiGeneration.save_to_bank && !aiGeneration.subject_id) {
+            error('Please select a subject to save generated questions into question bank.');
+            return;
+        }
+
+        setIsGeneratingAI(true);
+        try {
+            const payload = {
+                topic,
+                difficulty: aiGeneration.difficulty,
+                question_type: aiGeneration.question_type,
+                count: Number(aiGeneration.count) || 1,
+                marks: Number(aiGeneration.marks) || 1,
+                save_to_bank: Boolean(aiGeneration.save_to_bank),
+            };
+
+            if (aiGeneration.subject_id) {
+                payload.subject_id = Number(aiGeneration.subject_id);
+            }
+
+            const response = await questionBankAPI.generateQuestions(payload);
+            const generated = Array.isArray(response?.questions) ? response.questions : [];
+
+            if (!generated.length) {
+                error('AI could not generate questions. Please try different inputs.');
+                return;
+            }
+
+            const mappedQuestions = generated
+                .filter((q) => q?.question_type === 'mcq' || q?.question_type === 'true_false')
+                .map((q) => ({
+                    id: Date.now() + Math.floor(Math.random() * 100000),
+                    question_text: q.question_text || '',
+                    question_type: q.question_type,
+                    option_a: q.option_a || '',
+                    option_b: q.option_b || '',
+                    option_c: q.option_c || '',
+                    option_d: q.option_d || '',
+                    correct_answer: q.correct_answer || '',
+                    marks: Number(q.marks) || Number(aiGeneration.marks) || 1,
+                }));
+
+            if (!mappedQuestions.length) {
+                error('Generated questions are not compatible with this quiz editor. Try MCQ or True/False.');
+                return;
+            }
+
+            setQuizData((prev) => ({
+                ...prev,
+                questions: [...prev.questions, ...mappedQuestions],
+            }));
+
+            const saveMsg = response?.saved_count
+                ? ` and saved ${response.saved_count} to question bank`
+                : '';
+            const providerMsg = response?.fallback_used ? ' (fallback mode)' : '';
+            success(`Added ${mappedQuestions.length} AI question(s) to this quiz${saveMsg}${providerMsg}.`);
+        } catch (err) {
+            console.error('AI generation failed:', err);
+            error(err?.data?.detail || err?.message || 'Failed to generate AI questions');
+        } finally {
+            setIsGeneratingAI(false);
+        }
     };
 
     const addQuestion = () => {
@@ -428,6 +531,103 @@ const QuizCreator = ({ embedded = false, onDone, quizIdOverride = null }) => {
                             <Plus size={20} className="mr-2" />
                             Add Question
                         </button>
+                    </div>
+
+                    <div className="mb-6 p-4 border border-indigo-200 bg-indigo-50 rounded-xl">
+                        <div className="flex items-center mb-3">
+                            <Sparkles size={18} className="text-indigo-600 mr-2" />
+                            <h3 className="text-sm font-bold text-indigo-900">AI Question Generator</h3>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <input
+                                type="text"
+                                name="topic"
+                                value={aiGeneration.topic}
+                                onChange={handleAIChange}
+                                placeholder="Topic (e.g., OOP in Java)"
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            />
+
+                            <select
+                                name="question_type"
+                                value={aiGeneration.question_type}
+                                onChange={handleAIChange}
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            >
+                                <option value="mcq">MCQ</option>
+                                <option value="true_false">True/False</option>
+                            </select>
+
+                            <select
+                                name="difficulty"
+                                value={aiGeneration.difficulty}
+                                onChange={handleAIChange}
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            >
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+
+                            <input
+                                type="number"
+                                name="count"
+                                min="1"
+                                max="10"
+                                value={aiGeneration.count}
+                                onChange={handleAIChange}
+                                placeholder="Count"
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            />
+
+                            <input
+                                type="number"
+                                name="marks"
+                                min="0.25"
+                                step="0.25"
+                                value={aiGeneration.marks}
+                                onChange={handleAIChange}
+                                placeholder="Marks"
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            />
+
+                            <select
+                                name="subject_id"
+                                value={aiGeneration.subject_id}
+                                onChange={handleAIChange}
+                                className="px-3 py-2 border border-indigo-200 rounded-lg bg-white"
+                            >
+                                <option value="">Subject (optional)</option>
+                                {subjects.map((subject) => (
+                                    <option key={subject.id} value={subject.id}>{subject.name}</option>
+                                ))}
+                            </select>
+
+                            <label className="flex items-center px-3 py-2 border border-indigo-200 rounded-lg bg-white text-sm text-indigo-900">
+                                <input
+                                    type="checkbox"
+                                    name="save_to_bank"
+                                    checked={aiGeneration.save_to_bank}
+                                    onChange={handleAIChange}
+                                    className="mr-2"
+                                />
+                                Save to Question Bank
+                            </label>
+
+                            <button
+                                type="button"
+                                onClick={handleGenerateWithAI}
+                                disabled={isGeneratingAI}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-60"
+                            >
+                                {isGeneratingAI ? 'Generating...' : 'Generate with AI'}
+                            </button>
+                        </div>
+
+                        <p className="mt-2 text-xs text-indigo-700">
+                            Generated questions are added directly to this quiz. Enable Save to Question Bank to store reusable copies.
+                        </p>
                     </div>
 
                     {/* Question List */}

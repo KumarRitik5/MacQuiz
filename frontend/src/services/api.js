@@ -559,6 +559,10 @@ export const questionBankAPI = {
     deleteQuestion: (id) => fetchAPI(`/api/v1/question-bank/${id}`, {
         method: 'DELETE',
     }),
+    generateQuestions: (payload) => fetchAPI('/api/v1/question-bank/ai/generate', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    }),
 };
 
 export const analyticsAPI = {
