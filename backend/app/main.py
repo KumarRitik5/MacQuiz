@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import settings
 from app.db.database import engine, Base, SessionLocal
 from app.models.models import User
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.api.v1 import auth, users, quizzes, attempts, subjects, question_bank, analytics
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,14 @@ def init_admin() -> None:
     try:
         admin_exists = db.query(User).filter(User.email == admin_email).first()
         if admin_exists:
-            print("ℹ️  Admin user already exists")
+            # Keep env credentials as the recovery source of truth for admin access.
+            if not verify_password(admin_password, admin_exists.hashed_password):
+                admin_exists.hashed_password = get_password_hash(admin_password)
+                admin_exists.is_active = True
+                db.commit()
+                print("✅ Admin password synchronized from environment")
+            else:
+                print("ℹ️  Admin user already exists")
             return
 
         admin_user = User(

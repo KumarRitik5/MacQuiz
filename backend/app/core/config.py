@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import List
 
 class Settings(BaseSettings):
@@ -14,6 +15,13 @@ class Settings(BaseSettings):
     AI_ENABLED: bool = True
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-1.5-flash"
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_string_values(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
     
     @property
     def cors_origins_list(self) -> List[str]:
