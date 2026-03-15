@@ -238,11 +238,11 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
             <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                    <div className="flex items-center space-x-3 min-w-0">
+                    <div className="flex items-start space-x-3 min-w-0">
                         <Users size={28} />
-                        <div>
+                        <div className="min-w-0">
                             <h2 className="text-xl sm:text-2xl font-bold">Assign Students to Quiz</h2>
-                            <p className="text-purple-100 text-sm">{quiz.title}</p>
+                            <p className="text-purple-100 text-sm break-words">{quiz.title}</p>
                         </div>
                     </div>
                     <button
@@ -415,7 +415,7 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
                                                 <p className="text-xs text-gray-500">{student.student_id || 'No ID'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-sm text-gray-700">{student.email}</p>
+                                                <p className="text-sm text-gray-700 break-all">{student.email}</p>
                                             </div>
                                             <div>
                                                 <p className="text-sm text-gray-600">{student.department || '-'}</p>

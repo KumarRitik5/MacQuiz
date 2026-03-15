@@ -807,7 +807,7 @@ const QuizTaker = () => {
                         </div>
 
                         {/* Timer + Top Submit */}
-                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-6 w-full sm:w-auto">
+                        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 sm:gap-6 w-full sm:w-auto">
                             {quiz?.is_live_session && (
                                 <div className="flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-full border-2 border-red-500 animate-pulse">
                                     <Circle className="fill-current mr-2" size={12} />
@@ -840,7 +840,7 @@ const QuizTaker = () => {
                             <button
                                 onClick={() => setShowSubmitConfirm(true)}
                                 disabled={isSubmitting}
-                                className="px-4 sm:px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
+                                className="w-full sm:w-auto px-4 sm:px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition shadow-lg disabled:opacity-50"
                             >
                                 <Send size={16} className="inline mr-2" />
                                 Submit Quiz

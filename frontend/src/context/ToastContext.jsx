@@ -56,11 +56,11 @@ export const ToastProvider = ({ children }) => {
     return (
         <ToastContext.Provider value={{ showToast, success, error, info }}>
             {children}
-            <div className="fixed top-4 right-4 z-50 space-y-2">
+            <div className="fixed top-4 left-3 right-3 sm:left-auto sm:right-4 z-50 space-y-2">
                 {toasts.map(toast => (
                     <div
                         key={toast.id}
-                        className={`px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 ${getToastStyles(toast.type)}`}
+                        className={`w-full sm:w-auto sm:max-w-sm px-4 sm:px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 break-words ${getToastStyles(toast.type)}`}
                     >
                         {toast.message}
                     </div>

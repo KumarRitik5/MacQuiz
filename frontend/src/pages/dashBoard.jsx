@@ -440,8 +440,8 @@ const UserCreationForm = ({ onCancel, onUserCreated, currentUserRole }) => {
     };
 
     return (
-        <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
-            <div className="flex justify-between items-center border-b pb-4 mb-6">
+        <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl shadow-xl border border-gray-100">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b pb-4 mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">Provision New User Account</h2>
                 <button onClick={onCancel} className="text-gray-400 hover:text-red-600 transition">
                     <X size={24} />
@@ -458,8 +458,8 @@ const UserCreationForm = ({ onCancel, onUserCreated, currentUserRole }) => {
             {/* Bulk Upload Button - Admin Only */}
             {currentUserRole === 'admin' && (
                 <>
-                    <div className="border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl mb-8">
-                        <div className="flex items-start justify-between">
+                    <div className="border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-xl mb-8">
+                        <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
                             <div className="flex items-start space-x-3">
                                 <Upload size={24} className="text-blue-600 mt-1" />
                                 <div>
@@ -479,7 +479,7 @@ const UserCreationForm = ({ onCancel, onUserCreated, currentUserRole }) => {
                             <button
                                 onClick={() => setShowBulkUpload(true)}
                                 disabled={isSubmitting}
-                                className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg whitespace-nowrap disabled:opacity-50"
+                                className="w-full lg:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg whitespace-nowrap disabled:opacity-50"
                             >
                                 <Upload size={20} className="mr-2" />
                                 Bulk Upload
@@ -2044,19 +2044,19 @@ const TeacherStudentsView = () => {
     }
 
     return (
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-lg border border-gray-100">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">My Students</h2>
                     <p className="text-gray-600 mt-1">View and manage your students</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full sm:w-auto">
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Sort By</label>
                         <select
                             value={studentSortBy}
                             onChange={(e) => setStudentSortBy(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
                             <option value="name_asc">Name A-Z</option>
                             <option value="name_desc">Name Z-A</option>
@@ -2068,7 +2068,7 @@ const TeacherStudentsView = () => {
                     </div>
                     <button
                         onClick={() => setShowAddForm(true)}
-                        className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
+                        className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
                     >
                         <Plus size={20} className="mr-2" />
                         Add Student
@@ -2259,17 +2259,17 @@ const TeacherQuizManagement = () => {
 
     return (
         <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-                <div className="flex justify-between items-center mb-6">
+            <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8">
+                <div className="flex flex-col gap-3 mb-6">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">Quiz Management</h2>
                         <p className="text-gray-600 mt-1">Create and manage quizzes for students</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 w-full">
                         <select
                             value={quizSortBy}
                             onChange={(e) => setQuizSortBy(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             title="Sort quizzes"
                         >
                             <option value="title_asc">Sort: Title A-Z</option>
@@ -2282,14 +2282,14 @@ const TeacherQuizManagement = () => {
                         </select>
                         <button
                             onClick={() => setRefreshTrigger(prev => prev + 1)}
-                            className="flex items-center px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition shadow-md"
+                            className="w-full sm:w-auto justify-center flex items-center px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition shadow-md"
                             title="Refresh quiz list"
                         >
                             <RefreshCw size={20} />
                         </button>
                         <button
                             onClick={() => setShowBulkUpload(true)}
-                            className="flex items-center px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition shadow-lg"
+                            className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition shadow-lg"
                         >
                             <Upload size={20} className="mr-2" />
                             Bulk Upload
@@ -2299,7 +2299,7 @@ const TeacherQuizManagement = () => {
                                 setInlineEditQuizId(null);
                                 setShowCreateQuizInline(true);
                             }}
-                            className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
+                            className="w-full sm:w-auto justify-center flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition shadow-lg"
                         >
                             <Plus size={20} className="mr-2" />
                             Create New Quiz
@@ -2832,15 +2832,15 @@ const SettingsComponent = ({ currentUserRole }) => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 md:p-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">System Settings</h2>
                 <p className="text-gray-600 mb-6">Configure platform settings and preferences</p>
 
                 {/* Section Tabs */}
-                <div className="flex space-x-2 mb-6 border-b border-gray-200">
+                <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-2">
                     <button
                         onClick={() => setActiveSection('departments')}
-                        className={`px-6 py-3 font-semibold transition ${
+                        className={`px-4 sm:px-6 py-3 font-semibold transition rounded-lg ${
                             activeSection === 'departments'
                                 ? 'border-b-2 border-blue-600 text-blue-600'
                                 : 'text-gray-600 hover:text-blue-600'
@@ -2853,7 +2853,7 @@ const SettingsComponent = ({ currentUserRole }) => {
                     </button>
                     <button
                         onClick={() => setActiveSection('grading')}
-                        className={`px-6 py-3 font-semibold transition ${
+                        className={`px-4 sm:px-6 py-3 font-semibold transition rounded-lg ${
                             activeSection === 'grading'
                                 ? 'border-b-2 border-blue-600 text-blue-600'
                                 : 'text-gray-600 hover:text-blue-600'
@@ -2866,7 +2866,7 @@ const SettingsComponent = ({ currentUserRole }) => {
                     </button>
                     <button
                         onClick={() => setActiveSection('platform')}
-                        className={`px-6 py-3 font-semibold transition ${
+                        className={`px-4 sm:px-6 py-3 font-semibold transition rounded-lg ${
                             activeSection === 'platform'
                                 ? 'border-b-2 border-blue-600 text-blue-600'
                                 : 'text-gray-600 hover:text-blue-600'
@@ -2882,7 +2882,7 @@ const SettingsComponent = ({ currentUserRole }) => {
                 {/* Department Management */}
                 {activeSection === 'departments' && (
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                             <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-lg flex-1">
                                 <p className="text-sm text-blue-900">
                                     <strong>Department Management:</strong> Add or remove departments for student classification.
@@ -2901,13 +2901,13 @@ const SettingsComponent = ({ currentUserRole }) => {
                                     localStorage.setItem('quiz_departments', JSON.stringify(defaults));
                                     success('Reset to default departments');
                                 }}
-                                className="ml-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-semibold"
+                                className="w-full lg:w-auto lg:ml-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-semibold"
                             >
                                 Reset to Defaults
                             </button>
                         </div>
 
-                        <div className="flex gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <input
                                 type="text"
                                 value={newDepartment}
@@ -2918,7 +2918,7 @@ const SettingsComponent = ({ currentUserRole }) => {
                             />
                             <button
                                 onClick={handleAddDepartment}
-                                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition flex items-center"
+                                className="w-full sm:w-auto justify-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition flex items-center"
                             >
                                 <Plus size={20} className="mr-2" />
                                 Add
@@ -3020,7 +3020,7 @@ const SettingsComponent = ({ currentUserRole }) => {
 
                         <button
                             onClick={handleSaveGradingScale}
-                            className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition flex items-center"
+                            className="w-full sm:w-auto justify-center px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition flex items-center"
                         >
                             <Save size={20} className="mr-2" />
                             Save Grading Scale
@@ -3639,15 +3639,15 @@ const StudentResultsView = ({ selfOnly = false }) => {
 
     return (
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
-            <div className="mb-6 flex justify-between items-start">
+            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-0">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">{selfOnly ? 'My Quiz Results' : 'Student Quiz Results'}</h2>
                     <p className="text-gray-600">{selfOnly ? 'View your quiz attempts and performance' : 'View all student quiz attempts and performance'}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button
                         onClick={() => setRefreshKey(prev => prev + 1)}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors w-full sm:w-auto"
                         title="Refresh results"
                     >
                         <RefreshCw size={20} />
@@ -3656,7 +3656,7 @@ const StudentResultsView = ({ selfOnly = false }) => {
                     <button
                         onClick={exportToCSV}
                         disabled={sortedLatestCompletedAttempts.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors w-full sm:w-auto"
                     >
                         <Download size={20} />
                         Export Report
@@ -3666,12 +3666,12 @@ const StudentResultsView = ({ selfOnly = false }) => {
 
             {/* Filters */}
             <div className="flex flex-wrap gap-4 mb-6">
-                <div>
+                <div className="w-full sm:w-auto">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Quiz</label>
                     <select
                         value={filterQuiz}
                         onChange={(e) => setFilterQuiz(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                         <option value="all">All Quizzes</option>
                         {quizzes.map(quiz => (
@@ -3681,12 +3681,12 @@ const StudentResultsView = ({ selfOnly = false }) => {
                 </div>
 
                 {!selfOnly && (
-                    <div>
+                    <div className="w-full sm:w-auto">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Student</label>
                         <select
                             value={filterStudent}
                             onChange={(e) => setFilterStudent(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
                             <option value="all">All Students</option>
                             {students.map(student => (
@@ -4084,7 +4084,7 @@ const StudentUnifiedView = ({ activeTab, user, profileImage, onPickProfileImage,
         return (
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">My Profile</h2>
-                <div className="mb-6 flex items-center gap-4">
+                <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <div className="w-20 h-20 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-2xl">
                         {profileImage ? (
                             <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
@@ -4092,7 +4092,7 @@ const StudentUnifiedView = ({ activeTab, user, profileImage, onPickProfileImage,
                             `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U'
                         )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <button
                             onClick={onPickProfileImage}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
