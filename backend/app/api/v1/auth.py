@@ -13,6 +13,51 @@ from app.core.rate_limit import check_rate_limit
 
 router = APIRouter()
 
+
+def _get_client_ip(request: Request) -> str:
+    """Resolve client IP behind proxies/load balancers (e.g., Vercel)."""
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        first_ip = forwarded_for.split(",")[0].strip()
+        if first_ip:
+            return first_ip
+
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip:
+        return real_ip
+
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
+def _enforce_login_rate_limit(request: Request, username: str) -> None:
+    client_ip = _get_client_ip(request)
+    normalized_username = (username or "").strip().lower() or "unknown"
+
+    # Per-IP limit protects against broad abuse from one source.
+    ip_limit = check_rate_limit(f"login-ip:{client_ip}", limit=60, window_seconds=300)
+    if not ip_limit.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later.",
+            headers={"Retry-After": str(ip_limit.retry_after_seconds or 60)},
+        )
+
+    # Per-user limit avoids locking out entire campuses/offices sharing one public IP.
+    user_limit = check_rate_limit(
+        f"login-user:{normalized_username}",
+        limit=10,
+        window_seconds=300,
+    )
+    if not user_limit.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later.",
+            headers={"Retry-After": str(user_limit.retry_after_seconds or 60)},
+        )
+
 @router.post("/login", response_model=Token)
 async def login(
     request: Request,
@@ -22,14 +67,7 @@ async def login(
     """
     OAuth2 compatible login with form data (for Swagger UI)
     """
-    client_ip = request.client.host if request.client else "unknown"
-    rl = check_rate_limit(f"login:{client_ip}", limit=10, window_seconds=300)
-    if not rl.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many login attempts. Please try again later.",
-            headers={"Retry-After": str(rl.retry_after_seconds or 60)},
-        )
+    _enforce_login_rate_limit(request, form_data.username)
 
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -69,14 +107,7 @@ async def login_json(
     """
     JSON-based login (for frontend)
     """
-    client_ip = request.client.host if request.client else "unknown"
-    rl = check_rate_limit(f"login:{client_ip}", limit=10, window_seconds=300)
-    if not rl.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many login attempts. Please try again later.",
-            headers={"Retry-After": str(rl.retry_after_seconds or 60)},
-        )
+    _enforce_login_rate_limit(request, login_data.username)
 
     user = db.query(User).filter(User.email == login_data.username).first()
     if not user or not verify_password(login_data.password, user.hashed_password):

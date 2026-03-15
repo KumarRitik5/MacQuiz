@@ -1,5 +1,13 @@
 // Normalize API base URL and tolerate accidental comma-separated values in env.
 function resolveApiBaseUrl() {
+    if (!import.meta.env.DEV && typeof window !== 'undefined') {
+        const host = (window.location?.hostname || '').toLowerCase();
+        // On custom production frontend domain, prefer same-origin + Vercel rewrite proxy.
+        if (host === 'mac-quiz.vercel.app') {
+            return window.location.origin;
+        }
+    }
+
     const envValue = import.meta.env.VITE_API_BASE_URL;
     if (!envValue) {
         if (import.meta.env.DEV) {
@@ -231,20 +239,31 @@ async function fetchAPI(endpoint, options = {}) {
     }
     
     try {
-        const controller = new AbortController();
-        const timeoutMs = options.timeoutMs ?? 20000;
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const executeFetch = async (attemptIndex = 0) => {
+            const controller = new AbortController();
+            const timeoutMs = options.timeoutMs ?? 90000;
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        let response;
-        try {
-            response = await fetch(url, {
-                ...options,
-                headers,
-                signal: controller.signal,
-            });
-        } finally {
-            clearTimeout(timeoutId);
-        }
+            try {
+                return await fetch(url, {
+                    ...options,
+                    headers,
+                    signal: controller.signal,
+                });
+            } catch (fetchErr) {
+                const isAbort = fetchErr?.name === 'AbortError';
+                const isTransient = isAbort || !navigator.onLine || /network|fetch/i.test(String(fetchErr?.message || ''));
+                if (isTransient && attemptIndex < 2) {
+                    await new Promise((resolve) => setTimeout(resolve, 900 * (attemptIndex + 1)));
+                    return executeFetch(attemptIndex + 1);
+                }
+                throw fetchErr;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        };
+
+        const response = await executeFetch(0);
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -290,7 +309,7 @@ async function fetchAPI(endpoint, options = {}) {
         throw new APIError(
             error.message || 'Network error - please check if the server is running',
             0,
-            { detail: `[NEW CODE v4:15pm] Unable to connect to backend at ${API_BASE_URL}. Backend status: ${navigator.onLine ? 'Online' : 'Offline'}` }
+            { detail: `Unable to connect to backend at ${API_BASE_URL}. Backend status: ${navigator.onLine ? 'Online' : 'Offline'}. Please retry in a few seconds.` }
         );
     }
 }
@@ -562,6 +581,7 @@ export const questionBankAPI = {
     generateQuestions: (payload) => fetchAPI('/api/v1/question-bank/ai/generate', {
         method: 'POST',
         body: JSON.stringify(payload),
+        timeoutMs: 120000,
     }),
 };
 
@@ -582,5 +602,6 @@ export const analyticsAPI = {
     getAIInsights: (payload = {}) => fetchAPI('/api/v1/analytics/reports/ai-insights', {
         method: 'POST',
         body: JSON.stringify(payload),
+        timeoutMs: 120000,
     }),
 };

@@ -4,6 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 import logging
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from app.core.config import settings
 from app.db.database import engine, Base, SessionLocal
 from app.models.models import User
@@ -28,28 +29,36 @@ def init_admin() -> None:
 
     This should run during startup, not at import time.
     """
-    if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD:
+    admin_email = (settings.ADMIN_EMAIL or "").strip()
+    admin_password = (settings.ADMIN_PASSWORD or "").strip()
+
+    if not admin_email or not admin_password:
         print("ℹ️  ADMIN_EMAIL/ADMIN_PASSWORD not set; skipping admin bootstrap")
         return
 
     db = SessionLocal()
     try:
-        admin_exists = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+        admin_exists = db.query(User).filter(User.email == admin_email).first()
         if admin_exists:
             print("ℹ️  Admin user already exists")
             return
 
         admin_user = User(
-            email=settings.ADMIN_EMAIL,
-            hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+            email=admin_email,
+            hashed_password=get_password_hash(admin_password),
             first_name="Admin",
             last_name="User",
             role="admin",
             is_active=True,
         )
         db.add(admin_user)
-        db.commit()
-        print(f"✅ Admin user created: {settings.ADMIN_EMAIL}")
+        try:
+            db.commit()
+            print(f"✅ Admin user created: {admin_email}")
+        except IntegrityError:
+            # Another startup instance may create admin concurrently; ignore duplicate.
+            db.rollback()
+            print("ℹ️  Admin user already exists (detected during commit)")
     finally:
         db.close()
 
