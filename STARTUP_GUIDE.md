@@ -260,3 +260,4 @@ This project is part of the MacQuiz application.
 ---
 
 **Happy Quizzing! 🎓**
+<!--  -->
