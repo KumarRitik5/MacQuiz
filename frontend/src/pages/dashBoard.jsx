@@ -1198,6 +1198,97 @@ const EditUserModal = ({ user, onClose, onSuccess }) => {
     );
 };
 
+// Component for viewing user profile (read-only)
+const ViewProfileModal = ({ user, profileImage, onClose }) => {
+    const identityValue = user ? getDisplayUserId(user) : 'Not assigned';
+    const identityLabel = user?.role === 'student'
+        ? 'Student ID'
+        : user?.role === 'teacher'
+            ? 'Teacher ID'
+            : 'Admin Account';
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold text-gray-900">User Profile</h2>
+                        <button
+                            onClick={onClose}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition"
+                        >
+                            <X size={24} className="text-gray-500" />
+                        </button>
+                    </div>
+
+                    <div className="flex flex-col items-center mb-6">
+                        <div className="w-24 h-24 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-bold text-3xl shadow-lg ring-4 ring-blue-100 mb-4">
+                            {profileImage ? (
+                                <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U'
+                            )}
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-900">{user?.first_name} {user?.last_name}</h3>
+                        <p className="text-gray-500">{user?.email}</p>
+                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full mt-2 ${
+                            user?.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                            user?.role === 'teacher' ? 'bg-blue-100 text-blue-800' :
+                            'bg-green-100 text-green-800'
+                        }`}>
+                            {user?.role}
+                        </span>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Full Name</p>
+                            <p className="font-semibold text-gray-900">{user?.first_name} {user?.last_name}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Email</p>
+                            <p className="font-semibold text-gray-900 break-all">{user?.email || 'N/A'}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">{identityLabel}</p>
+                            <p className="font-semibold text-gray-900">{identityValue}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Department</p>
+                            <p className="font-semibold text-gray-900">{user?.department || 'N/A'}</p>
+                        </div>
+                        {user?.role === 'student' && (
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                <p className="text-xs text-gray-500 mb-1">Class / Year</p>
+                                <p className="font-semibold text-gray-900">{user?.class_year || 'N/A'}</p>
+                            </div>
+                        )}
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Phone</p>
+                            <p className="font-semibold text-gray-900">{user?.phone_number || 'N/A'}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-1">Account Status</p>
+                            <p className={`font-semibold ${user?.is_active ? 'text-green-700' : 'text-red-700'}`}>
+                                {user?.is_active ? 'Active' : 'Inactive'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // Component for listing existing users
 const UserList = ({ onAddClick, refreshTrigger }) => {
     const { success, error } = useToast();
@@ -1205,6 +1296,8 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [filter, setFilter] = useState('all'); // all, teacher, student
     const [editingUser, setEditingUser] = useState(null);
+    const [viewingUser, setViewingUser] = useState(null);
+    const [viewingUserProfileImage, setViewingUserProfileImage] = useState('');
 
     const fetchUsers = useCallback(async () => {
         setIsLoading(true);
@@ -1243,6 +1336,16 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
     const handleUpdateSuccess = () => {
         setEditingUser(null);
         fetchUsers();
+    };
+
+    const handleViewProfile = async (user) => {
+        try {
+            const fullUser = await userAPI.getUser(user.id);
+            setViewingUser(fullUser);
+            setViewingUserProfileImage(fullUser.profile_image || '');
+        } catch (err) {
+            error(err.data?.detail || "Failed to load user profile");
+        }
     };
 
     const filteredUsers = users.filter(user => {
@@ -1307,6 +1410,7 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
@@ -1320,6 +1424,15 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredUsers.map((user) => (
                                 <tr key={user.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="w-10 h-10 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-semibold text-sm">
+                                            {user.profile_image ? (
+                                                <img src={user.profile_image} alt="Profile" className="w-full h-full object-cover" />
+                                            ) : (
+                                                `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase()
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                         {user.first_name} {user.last_name}
                                     </td>
@@ -1344,22 +1457,30 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        {user.role !== 'admin' && (
-                                            <div className="flex space-x-3">
-                                                <button
-                                                    onClick={() => handleEdit(user)}
-                                                    className="text-blue-600 hover:text-blue-900 transition"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(user.id, `${user.first_name} ${user.last_name}`)}
-                                                    className="text-red-600 hover:text-red-900 transition"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex space-x-3">
+                                            <button
+                                                onClick={() => handleViewProfile(user)}
+                                                className="text-green-600 hover:text-green-900 transition"
+                                            >
+                                                View
+                                            </button>
+                                            {user.role !== 'admin' && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleEdit(user)}
+                                                        className="text-blue-600 hover:text-blue-900 transition"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(user.id, `${user.first_name} ${user.last_name}`)}
+                                                        className="text-red-600 hover:text-red-900 transition"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -1374,6 +1495,18 @@ const UserList = ({ onAddClick, refreshTrigger }) => {
                     user={editingUser}
                     onClose={() => setEditingUser(null)}
                     onSuccess={handleUpdateSuccess}
+                />
+            )}
+
+            {/* View Profile Modal */}
+            {viewingUser && (
+                <ViewProfileModal
+                    user={viewingUser}
+                    profileImage={viewingUserProfileImage}
+                    onClose={() => {
+                        setViewingUser(null);
+                        setViewingUserProfileImage('');
+                    }}
                 />
             )}
         </div>
@@ -1970,6 +2103,8 @@ const TeacherStudentsView = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [studentSortBy, setStudentSortBy] = useState('name_asc');
+    const [viewingStudent, setViewingStudent] = useState(null);
+    const [viewingStudentProfileImage, setViewingStudentProfileImage] = useState('');
 
     const fetchTeacherStudents = useCallback(async () => {
         setIsLoading(true);
@@ -1997,6 +2132,16 @@ const TeacherStudentsView = () => {
     const handleUserCreated = () => {
         setShowAddForm(false);
         fetchTeacherStudents();
+    };
+
+    const handleViewStudentProfile = async (student) => {
+        try {
+            const fullStudent = await userAPI.getUser(student.id);
+            setViewingStudent(fullStudent);
+            setViewingStudentProfileImage(fullStudent.profile_image || '');
+        } catch (err) {
+            error(err.data?.detail || "Failed to load student profile");
+        }
     };
 
     const sortedStudents = useMemo(() => {
@@ -2072,16 +2217,27 @@ const TeacherStudentsView = () => {
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b-2 border-gray-200">
                             <tr>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Photo</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Student ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Department</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Year</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {sortedStudents.map((student) => (
                                 <tr key={student.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="w-10 h-10 rounded-full bg-blue-600 overflow-hidden flex items-center justify-center text-white font-semibold text-sm">
+                                            {student.profile_image ? (
+                                                <img src={student.profile_image} alt="Profile" className="w-full h-full object-cover" />
+                                            ) : (
+                                                `${student.first_name?.[0] || ''}${student.last_name?.[0] || ''}`.toUpperCase()
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="font-semibold text-gray-900">{student.first_name} {student.last_name}</div>
                                     </td>
@@ -2097,6 +2253,14 @@ const TeacherStudentsView = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                                         {student.class_year || 'N/A'}
                                     </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <button
+                                            onClick={() => handleViewStudentProfile(student)}
+                                            className="text-green-600 hover:text-green-900 transition text-sm font-medium"
+                                        >
+                                            View Profile
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -2107,6 +2271,18 @@ const TeacherStudentsView = () => {
                     <AlertCircle size={48} className="mx-auto mb-4 text-gray-400" />
                     <p>No students found</p>
                 </div>
+            )}
+
+            {/* View Student Profile Modal */}
+            {viewingStudent && (
+                <ViewProfileModal
+                    user={viewingStudent}
+                    profileImage={viewingStudentProfileImage}
+                    onClose={() => {
+                        setViewingStudent(null);
+                        setViewingStudentProfileImage('');
+                    }}
+                />
             )}
         </div>
     );

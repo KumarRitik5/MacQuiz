@@ -110,7 +110,11 @@ const QuizTaker = () => {
 
         const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
 
-        const parsed = new Date(normalized);
+        // Backend emits UTC-naive datetimes; mark them as UTC before parsing in browser.
+        const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+        const normalizedWithTz = hasTimezone ? normalized : `${normalized}Z`;
+
+        const parsed = new Date(normalizedWithTz);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
     }, []);
 

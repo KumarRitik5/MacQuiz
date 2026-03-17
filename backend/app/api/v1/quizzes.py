@@ -424,9 +424,9 @@ async def check_quiz_eligibility(
         QuizAttempt.is_completed == False
     ).first()
     
-    # Quiz schedule datetimes are persisted as naive values; use local server time
-    # to avoid allowing early joins from UTC/local interpretation mismatch.
-    now = datetime.now()
+    # Quiz schedule datetimes are stored as UTC-naive values.
+    # Compare using utcnow() so Vercel/server timezone does not shift schedule gates.
+    now = datetime.utcnow()
     calculated_duration = quiz.duration_minutes
     
     # For live sessions, enforce strict timing and calculate remaining time (only for students)
@@ -561,7 +561,7 @@ async def update_quiz(
         and (update_data.get('is_live_session') is True or quiz.is_live_session)
     )
     if activating_live_quiz:
-        now = datetime.now()
+        now = datetime.utcnow()
         candidate_start = update_data.get('live_start_time', quiz.live_start_time)
         duration = update_data.get('duration_minutes', quiz.duration_minutes) or 30
 

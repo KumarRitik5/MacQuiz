@@ -250,9 +250,9 @@ async def start_quiz_attempt(
             detail="Quiz is not active"
         )
     
-    # Quiz schedule datetimes are stored as naive timestamps in this project.
-    # Compare against local server time to avoid early-join due UTC/local skew.
-    now = datetime.now()
+    # Quiz schedule datetimes are stored as UTC-naive values.
+    # Compare against utcnow() to keep checks stable across hosting timezones.
+    now = datetime.utcnow()
 
     # For teachers/admins previewing: delete any existing incomplete attempts to start fresh
     if is_teacher_or_admin:
@@ -734,9 +734,8 @@ async def get_remaining_time(
         # Teacher/admin previews use per-attempt duration even for live quizzes.
         # Regular quizzes also use per-attempt duration.
         if quiz.duration_minutes:
-            # started_at is persisted using local datetime.now in this project,
-            # so use local now here to avoid timezone-offset inflation.
-            preview_now = datetime.now()
+            # started_at is stored UTC-naive; use utcnow() for consistent duration math.
+            preview_now = datetime.utcnow()
             deadline = attempt.started_at + timedelta(minutes=quiz.duration_minutes)
             remaining = (deadline - preview_now).total_seconds()
             is_expired = preview_now > deadline

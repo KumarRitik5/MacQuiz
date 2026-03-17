@@ -17,9 +17,16 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
         if (!value) return '';
         const raw = String(value).trim().replace(' ', 'T');
 
-        // If server already returned a naive datetime, keep it as local wall-clock time.
+        // Backend stores UTC-naive datetimes; interpret naive values as UTC then render local.
         if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?$/.test(raw) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
-            return raw.slice(0, 16);
+            const asUtc = new Date(`${raw}Z`);
+            if (Number.isNaN(asUtc.getTime())) return '';
+            const yyyy = asUtc.getFullYear();
+            const mm = String(asUtc.getMonth() + 1).padStart(2, '0');
+            const dd = String(asUtc.getDate()).padStart(2, '0');
+            const hh = String(asUtc.getHours()).padStart(2, '0');
+            const mi = String(asUtc.getMinutes()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
         }
 
         // If timezone is explicit, convert to local input representation.
@@ -44,6 +51,13 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
         now.setSeconds(0, 0);
         now.setMinutes(now.getMinutes() + 1);
         return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+
+    const localDateTimeInputToUtcNaive = (value) => {
+        if (!value) return null;
+        const parsedLocal = new Date(value);
+        if (Number.isNaN(parsedLocal.getTime())) return null;
+        return parsedLocal.toISOString().slice(0, 19);
     };
 
     const fetchStudents = useCallback(async () => {
@@ -195,9 +209,13 @@ const QuizAssignmentModal = ({ isOpen, quiz, onClose, onSuccess }) => {
             };
 
             if (isLiveSession && liveStartTime) {
-                // Send local naive datetime string so backend stores the same wall-clock time.
-                updatePayload.live_start_time = `${liveStartTime}:00`;
-                console.log('🕐 Sending local live_start_time:', updatePayload.live_start_time);
+                // Send UTC-naive timestamp so backend comparisons remain timezone-safe on serverless.
+                const utcNaiveStart = localDateTimeInputToUtcNaive(liveStartTime);
+                if (!utcNaiveStart) {
+                    throw new Error('Invalid live start time format');
+                }
+                updatePayload.live_start_time = utcNaiveStart;
+                console.log('🕐 Sending UTC live_start_time:', updatePayload.live_start_time);
             }
 
             console.log('Saving assignment with payload:', updatePayload);
